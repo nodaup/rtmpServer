@@ -1,0 +1,11 @@
+#pragma once
+
+
+#define seekerLogger_VERSION_MAJOR @seekerLogger_VERSION_MAJOR@
+#define seekerLogger_VERSION_MINOR @seekerLogger_VERSION_MINOR@
+
+
+#cmakedefine SPDLOG_ACTIVE_LEVEL @SPDLOG_ACTIVE_LEVEL@
+#cmakedefine LOG_FILE_NAME "@LOG_FILE_NAME@"
+#cmakedefine LOG_USE_ASYN
+#cmakedefine LOG_THREAD_COUNT @LOG_THREAD_COUNT@
