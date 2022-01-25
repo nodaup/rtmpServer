@@ -84,6 +84,14 @@ ELSE() # MAC or linux
 
 endif()
 
+# asio
+if(WIN32)
+    find_path(ASIO_DIR asio)
+elseif(UNIX)
+    find_path(ASIO_DIR asio)
+    find_library(PTHEARD_LIBRARY pthread)
+endif()
+
 
 
 option(LOG_USE_ASYN "LOG_USE_ASYN" ON)
@@ -110,8 +118,11 @@ aux_source_directory(src CPPLIST)
 if(WIN32)
 add_executable (${PROJECT_NAME} 
       ${CPPLIST}
-      test/testRtpServer.cpp
-      )
+
+      "src/rtpServer.cpp" 
+      "include/rtpServer.h"
+      
+       "src/main.cpp")
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"
@@ -137,7 +148,6 @@ if(WIN32)
 		PRIVATE 
 			${PROJECT_SOURCE_DIR}/include
             ${JRTPLIB_INCLUDE_PATH}
-            #${JTHREAD_INCLUDE_PATH}
 			${AVCODEC_INCLUDE_DIR}
             ${AVFORMAT_INCLUDE_DIR}
             ${AVUTIL_INCLUDE_DIR}
@@ -146,7 +156,7 @@ if(WIN32)
             ${SWRESAMPLE_INCLUDE_DIR}
             ${SWSCALE_INCLUDE_DIR}
             ${OpenCV_INCLUDE_DIRS}
-			
+			${ASIO_DIR}
 
 	)
 	target_link_libraries( ${PROJECT_NAME}  
@@ -169,7 +179,6 @@ elseif(UNIX)
 		PRIVATE 
 			${PROJECT_SOURCE_DIR}/include
             ${JRTPLIB_INCLUDE_PATH}
-            #${JTHREAD_INCLUDE_PATH}
 			${AVCODEC_INCLUDE_DIR}
             ${AVFORMAT_INCLUDE_DIR}
             ${AVUTIL_INCLUDE_DIR}
