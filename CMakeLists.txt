@@ -119,10 +119,11 @@ if(WIN32)
 add_executable (${PROJECT_NAME} 
       ${CPPLIST}
 
-      "src/rtpServer.cpp" 
-      "include/rtpServer.h"
+      #"src/rtpServer.cpp" 
+      #"include/rtpServer.h"
       
-       "src/main.cpp")
+      #"src/main.cpp"
+      "test/mp42rtmp.cpp")
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"
