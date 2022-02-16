@@ -1,26 +1,28 @@
-//#include "seeker/logger.h"
-//#include "INIReader.h"
-//
-////void http_start(int port) {
-////
-////    HttpServer* pServer = new HttpServer("0.0.0.0", port);
-////    pServer->start();
-////}
-//
-//int main() {
-//    seeker::Logger::init();
-//    printf("start start start\n");
-//    INIReader reader("application.ini");
-//    int http_port = std::stoi(reader.Get("this", "http_port", "30503"));
-//
-//
-//
-//
-//    /*std::thread httpThread{ http_start, http_port };
-//    httpThread.join();*/
-//    //UdpReceiver& pReceiver = UdpReceiver::getInstance();
-//
-//    //pReceiver.start();
-//
-//    return 0;
-//}
+﻿#include "seeker/logger.h"
+#include "INIReader.h"
+#include "rtpServer.h"
+
+void asio_video_thread() {
+    rtpServer as("127.0.0.1", 30502, false);
+    as.start();
+}
+
+INIReader reader("application.ini");
+
+int main(int argc, char* argv[]) {
+
+    if (reader.ParseError() != 0) {
+        std::cout << "Can't load 'application.ini'\n";
+        return 1;
+    } 
+
+    seeker::Logger::init();
+    I_LOG("Hello! This is Loki!");
+   
+    //ffmpeg -re -i C:/Users/97017/Desktop/1.h264 -vcodec copy -f rtp rtp://127.0.0.1:1234
+    std::thread t2(asio_video_thread);
+    t2.join();
+
+
+    return 0;
+}

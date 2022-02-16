@@ -119,11 +119,12 @@ if(WIN32)
 add_executable (${PROJECT_NAME} 
       ${CPPLIST}
 
-      #"src/rtpServer.cpp" 
-      #"include/rtpServer.h"
+      "src/rtpServer.cpp" 
+      "include/rtpServer.h"
       
-      #"src/main.cpp"
-      "test/mp42rtmp.cpp")
+      "src/main.cpp"
+      #"test/mp42rtmp.cpp"
+       )
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"
@@ -205,4 +206,11 @@ elseif(UNIX)
 			
 	)
 endif()
+
+# Copy configuration to output directory
+add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        "${PROJECT_SOURCE_DIR}/resources/application.ini"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/"
+        )
 
