@@ -124,6 +124,9 @@ add_executable (${PROJECT_NAME}
       
       "src/main.cpp"
       #"test/mp42rtmp.cpp"
+      "include/rtpParse.h"
+      "src/rtpParse.cpp"
+      "src/ConvertH264.hpp" 
        )
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 

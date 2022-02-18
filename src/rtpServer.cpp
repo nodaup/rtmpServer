@@ -41,6 +41,8 @@ void rtpServer::start() {
         if (recvLen > 0) {
 
             I_LOG("GET!");
+
+
             //todo parsing rtp
             /*ssrc = Utils::parsingRTPPacket(recv_buf, recvLen, &payload_offset, &payload_type);
             if (ssrc < 0) {
