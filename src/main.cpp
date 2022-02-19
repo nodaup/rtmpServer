@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     seeker::Logger::init();
     I_LOG("Hello! This is Loki!");
    
-    //ffmpeg -re -i C:/Users/97017/Desktop/1.h264 -vcodec copy -f rtp rtp://127.0.0.1:1234
+    //ffmpeg -re -i C:/Users/97017/Desktop/1.h264 -vcodec copy -f rtp rtp://127.0.0.1:30502
     std::thread t2(asio_video_thread);
     t2.join();
 
