@@ -26,6 +26,8 @@ using asio::io_context;
 #define BUFF_SIZE 10240
 
 
+#include <functional>
+
 typedef std::function<void(uint8_t*, int)> RecvDataCallback;
 
 class rtpServer {
@@ -36,27 +38,11 @@ class rtpServer {
 	//trueÎªÒôÆµ£¬falseÎªÊÓÆµ
 	bool flag;
 
-//private:
-//
-//	asio::io_service& ioService;
-//	udp::socket* localSocket4Rtp;
-//	int remotePort = 1234;
-//	int localPort4Rtp = 4321;
-//	string remoteIp = "127.0.0.1";
-//	int32_t remoteSsrc = -1;
-//	uint8_t recvBuf4Rtp[BUFF_SIZE]{ 0 };
-//	udp::endpoint tempEndpoint4Rtp;
-//
-//	bool stopFlag = false;
-//
-//	void do_data_recv();
-//	void handleData4Rtp(const asio::error_code error, size_t bytes_transferred);
-
 public:
 
 	rtpServer(const std::string& ip, int port, bool is_audio = false);
 
 	void start();
-
+	
 	
 };

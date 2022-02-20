@@ -17,8 +17,16 @@ else()
 	set(CMAKE_CXX_FLAGS "-D__STDC_CONSTANT_MACROS")
 endif()
 add_definitions(-DNOMINMAX)
+
 include(./.SET_LOCAL_PATH.cmake)
 
+
+
+set(USE_VIDEO_ENGINE_IMP7 1)
+add_subdirectory("module/videoEngineImp7")
+set(MODULE_PATH ${PROJECT_SOURCE_DIR}/module)
+set(VIDEO_ENGINE_INCLUDE "${MODULE_PATH}/videoEngineImp7/api" "${MODULE_PATH}/videoEngineImp7/include")
+set(VIDEO_ENGINE_LIB "videoEngineImp7")
 
 
 #-------------------------------------
@@ -128,7 +136,9 @@ add_executable (${PROJECT_NAME}
       "src/rtpParse.cpp"
       "src/ConvertH264.hpp" 
       
-        )
+           "include/manager.h" 
+           "src/manager.cpp"
+           )
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"
@@ -163,6 +173,7 @@ if(WIN32)
             ${SWSCALE_INCLUDE_DIR}
             ${OpenCV_INCLUDE_DIRS}
 			${ASIO_DIR}
+            ${VIDEO_ENGINE_INCLUDE}
 
 	)
 	target_link_libraries( ${PROJECT_NAME}  
@@ -176,7 +187,7 @@ if(WIN32)
             ${SWRESAMPLE_LIBRARY}
             ${SWSCALE_LIBRARY}
             ${OpenCV_LIBS}
-
+            ${VIDEO_ENGINE_LIB}
 
 	)
    
@@ -193,6 +204,7 @@ elseif(UNIX)
             ${SWRESAMPLE_INCLUDE_DIR}
             ${SWSCALE_INCLUDE_DIR}
             ${OpenCV_INCLUDE_DIRS}
+            ${VIDEO_ENGINE_INCLUDE}
 
 	)
 	target_link_libraries( ${PROJECT_NAME}  
@@ -207,6 +219,7 @@ elseif(UNIX)
             ${SWRESAMPLE_LIBRARY}
             ${SWSCALE_LIBRARY}
             ${OpenCV_LIBS}
+            ${VIDEO_ENGINE_LIB}
 			
 	)
 endif()

@@ -2,12 +2,14 @@
 #include "INIReader.h"
 #include "rtpServer.h"
 
+INIReader reader("application.ini");
+
+
 void asio_video_thread() {
     rtpServer as("127.0.0.1", 30502, false);
     as.start();
 }
 
-INIReader reader("application.ini");
 
 int main(int argc, char* argv[]) {
 
@@ -20,9 +22,10 @@ int main(int argc, char* argv[]) {
     I_LOG("Hello! This is Loki!");
    
     //ffmpeg -re -i C:/Users/97017/Desktop/1.h264 -vcodec copy -f rtp rtp://127.0.0.1:30502
+
+
     std::thread t2(asio_video_thread);
     t2.join();
 
-
-    return 0;
+    
 }

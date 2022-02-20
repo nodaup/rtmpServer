@@ -30,7 +30,7 @@ extern "C" {
 #endif
 class ConvertH264Util {
 public:
-	ConvertH264Util(int width, int height, string outFile) {
+	ConvertH264Util(int width, int height, std::string outFile) {
 		out_file = outFile;
 		std::cout << width << "::::" << height << std::endl;
 		// Method1.
