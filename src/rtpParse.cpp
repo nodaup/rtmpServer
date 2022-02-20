@@ -6,6 +6,7 @@
 #include <ws2ipdef.h>
 
 #include "rtpParse.h"
+#include <seeker/loggerApi.h>
 
 
 int RtpParse::parsingRTPPacket(uint8_t* data, std::size_t size, int* payload_offset, int* payloadType)
@@ -62,7 +63,7 @@ int RtpParse::parsingRTPPacket(uint8_t* data, std::size_t size, int* payload_off
 
     *payloadType = data[1] & 0x7f;
 
-    //    T_LOG("payload type is {}",*payloadType);
+    I_LOG("payload type is {}",*payloadType);
 
     *payload_offset = payloadOffset;
 

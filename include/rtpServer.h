@@ -23,7 +23,7 @@ using namespace asio;
 using namespace std::chrono;
 using asio::io_context;
 
-#define BUFF_SIZE 10240
+#define BUFF_SIZE 10240 *2
 
 
 #include <functional>

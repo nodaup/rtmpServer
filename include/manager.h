@@ -32,6 +32,9 @@ public:
 
     int init();
 
+    int decodeTh();
+
+    std::unordered_map<std::string, std::thread> threadMap = {};
     std::list<std::pair<uint8_t*, int>> pktList;
     std::mutex recvPktMtx;
     Decoder* decoder = nullptr;
