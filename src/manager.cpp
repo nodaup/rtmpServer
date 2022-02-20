@@ -33,7 +33,7 @@ int Manager::init() {
             }
             lock.unlock();
 
-            for (auto it = tempPktList.begin(); it != tempPktList.end(); ++it) {
+            for (auto it = tempPktList.begin(); it != tempPktList.end(); it++) {
                 I_LOG("tempPktList:{}", tempPktList.size());
                 decoder->push(it->first, it->second, 0);
                 AVFrame* frame = av_frame_alloc();
