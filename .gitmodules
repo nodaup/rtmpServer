@@ -1,0 +1,3 @@
+[submodule "module/videoEngineImp7"]
+	path = module/videoEngineImp7
+	url = https://gitea.seekloud.org:50443/seekloud/videoEngineImp7.git
