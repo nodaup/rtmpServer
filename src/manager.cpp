@@ -29,11 +29,28 @@ int Manager::init() {
             {
                 auto pkt = pktList.front();
                 pktList.pop_front();
-                tempPktList.push_back(pkt);
+               /* tempPktList.push_back(pkt);*/
+
+                decoder->push(pkt.first, pkt.second, 0);
+                AVFrame* frame = av_frame_alloc();
+                int rst = decoder->poll(frame);
+                I_LOG("decoder poll");
+                if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
+                    I_LOG("no :{}, width:{}", rst, frame->width);
+                    av_frame_free(&frame);
+                    continue;
+                }
+                if (ch == nullptr) {
+                    ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
+                }
+                I_LOG("write frame 1");
+                ch->convertFrame(frame);
+                av_frame_free(&frame);
+
             }
             lock.unlock();
 
-            for (auto it = tempPktList.begin(); it != tempPktList.end(); it++) {
+           /* for (auto it = tempPktList.begin(); it != tempPktList.end(); it++) {
                 I_LOG("tempPktList:{}", tempPktList.size());
                 decoder->push(it->first, it->second, 0);
                 AVFrame* frame = av_frame_alloc();
@@ -50,7 +67,7 @@ int Manager::init() {
                 I_LOG("write frame 1");
                 ch->convertFrame(frame);
                 av_frame_free(&frame);
-            }
+            }*/
         }
     };
 
