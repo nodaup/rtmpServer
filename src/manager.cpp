@@ -26,6 +26,7 @@ int Manager::init() {
     encoder->setFrameRate(30);
     encoder->setFrameSize(1280, 720);
     encoder->setProfile("baseline");
+    encoder->init();
 
     std::thread decodeThread{ &Manager::decodeTh, this };
     threadMap["decodeTh"] = std::move(decodeThread);
@@ -80,6 +81,19 @@ int Manager::decodeTh() {
                 I_LOG("write frame 1");
                 ch->convertFrame(frame);
             }
+
+            //push to encode list
+            uint8_t* dstBuf = (uint8_t*)malloc(frame->width * frame->height * 3);
+            memset(dstBuf, 0, frame->width * frame->height * 3);
+            uint8_t* frameData = frame->data[0];
+            for (int i = 0; i < frame->height; ++i) {
+                memcpy(dstBuf + i * frame->width * 3, frameData, frame->width * 3);
+                frameData += frame->linesize[0];
+            }
+            std::unique_lock<std::mutex> lk1(encodePktMtx);
+            sendList.push(mixFrame{ dstBuf, frame->width, frame->height });
+            sendpktCond.notify_all();
+
             av_frame_free(&frame);
             free(pkt.first);
         }
@@ -109,13 +123,13 @@ int Manager::encodeTh() {
 
         std::vector<std::pair<uint8_t*, int>> outData{};
         int ret = encoder->poll(outData);
-        //I_LOG("encode:{}", encode_count++);
+        I_LOG("encode !!");
         if (ret == 0) {
             for (auto iter = outData.begin(); iter != outData.end(); iter++) {
                 //·¢ËÍ
                 as->send(iter->first, iter->second);
                 free(iter->first);
-                I_LOG("encode !!");
+                I_LOG("send !!");
 
             }
         }

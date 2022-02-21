@@ -60,11 +60,12 @@ void rtpServer::send(uint8_t* packet, int len) {
 
     if (packet) {
 
-        uint8_t temp[1024] { 0 };
+        uint8_t temp[BUFF_SIZE] { 0 };
         memcpy(temp, packet, len);
-        //remote ip port
-        udp::endpoint remote_endpoint(ip::address_v4::from_string("127.0.0.1"), 7000);
+        //remote ip port rtmp://192.168.31.154:1935
+        udp::endpoint remote_endpoint(ip::address_v4::from_string("192.168.31.154"), 1935);
         server.send_to(asio::buffer(temp), remote_endpoint);
+        free(temp);
     }
 }
 

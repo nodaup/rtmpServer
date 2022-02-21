@@ -52,7 +52,7 @@ public:
     std::mutex recvPktMtx;
     std::mutex encodePktMtx;
 
-    bool stopFlag = true;
+    bool stopFlag = false;
 
     Decoder* decoder = nullptr;
     Encoder* encoder = nullptr;
