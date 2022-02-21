@@ -10,6 +10,12 @@
 #include<mutex>
 #include<math.h>
 #include <map>
+extern "C" {
+#include "libavcodec/avcodec.h"
+#include "libavformat/avformat.h"
+#include "libavutil/imgutils.h"
+#include "libswscale/swscale.h"
+};
 
 using std::thread;
 using std::string;
@@ -32,17 +38,24 @@ typedef std::function<void(uint8_t*, int)> RecvDataCallback;
 
 class rtpServer {
 
+private:
+
 	//参考loki
 	asio::io_context ioContext; //提供io核心功能
 	udp::socket server;
 	//true为音频，false为视频
 	bool flag;
+	int frameRate = 30;
+	RecvDataCallback callBack;
 
 public:
 
 	rtpServer(const std::string& ip, int port, bool is_audio = false);
 
 	void start();
-	
+
+	void send(uint8_t* pkt, int len);
+
+	void setCallBack(RecvDataCallback _callBack);
 	
 };

@@ -1,16 +1,16 @@
 #include "manager.h"
 #include "ConvertH264.hpp"
 
-int Manager::saveRtpPkt(uint8_t* pkt, int pktsize) {
-
-    recvPktMtx.lock();
-    auto temp = new uint8_t[pktsize + 1]();
-    memcpy(temp, pkt, pktsize);
-    pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
-    recvPktMtx.unlock();
-    pktCond.notify_one();
-    return 0;
-}
+//int Manager::saveRtpPkt(uint8_t* pkt, int pktsize) {
+//
+//    as->recvPktMtx.lock();
+//    auto temp = new uint8_t[pktsize + 1]();
+//    memcpy(temp, pkt, pktsize);
+//    as->pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
+//    as->recvPktMtx.unlock();
+//    pktCond.notify_one();
+//    return 0;
+//}
 
 int Manager::init() {
     decoder = new Decoder87();
@@ -18,8 +18,33 @@ int Manager::init() {
     decoder->init();
     ConvertH264Util* ch = nullptr;
 
+    encoder = new Encoder87();
+    encoder->setIsCrf(false);
+    encoder->setPixFmt(AV_PIX_FMT_RGB24);
+    encoder->setCodecFmt("h264");
+    encoder->setBitrate(1000000);
+    encoder->setFrameRate(30);
+    encoder->setFrameSize(1280, 720);
+    encoder->setProfile("baseline");
+
     std::thread decodeThread{ &Manager::decodeTh, this };
     threadMap["decodeTh"] = std::move(decodeThread);
+
+    std::thread encodeThread{ &Manager::encodeTh, this };
+    threadMap["encodeTh"] = std::move(encodeThread);
+
+    as = new rtpServer("127.0.0.1", 30502, false);  
+
+    auto recvCallBack = [&](uint8_t* pkt, int pktsize) {
+        recvPktMtx.lock();
+        auto temp = new uint8_t[pktsize + 1]();
+        memcpy(temp, pkt, pktsize);
+        pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
+        recvPktMtx.unlock();
+        pktCond.notify_one();
+    };
+    as->setCallBack(recvCallBack);
+    as->start();
 }
 
 
@@ -56,8 +81,44 @@ int Manager::decodeTh() {
                 ch->convertFrame(frame);
             }
             av_frame_free(&frame);
-
+            free(pkt.first);
         }
         lock.unlock();
+    }
+}
+
+int Manager::encodeTh() {
+    I_LOG("encoder thread start");
+    int encode_count = 0;
+    while (!stopFlag)
+    {
+        std::unique_lock<std::mutex> lk(encodePktMtx);
+        sendpktCond.wait(lk, [this]() {return sendList.size() > 0 || stopFlag; });
+        if (stopFlag)
+        {
+            lk.unlock();
+            break;
+        }
+
+        auto dstData = sendList.front();
+        sendList.pop();
+
+        lk.unlock();
+        //I_LOG("encode:{}", encode_count);
+        encoder->push(dstData.data, dstData.width * dstData.height * 3, dstData.width, dstData.height);
+
+        std::vector<std::pair<uint8_t*, int>> outData{};
+        int ret = encoder->poll(outData);
+        //I_LOG("encode:{}", encode_count++);
+        if (ret == 0) {
+            for (auto iter = outData.begin(); iter != outData.end(); iter++) {
+                //·¢ËÍ
+                as->send(iter->first, iter->second);
+                free(iter->first);
+                I_LOG("encode !!");
+
+            }
+        }
+        free(dstData.data);
     }
 }

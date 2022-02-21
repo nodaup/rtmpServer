@@ -1,13 +1,19 @@
 ﻿#include "seeker/logger.h"
 #include "INIReader.h"
 #include "rtpServer.h"
+#include "manager.h"
 
 INIReader reader("application.ini");
 
 
-void asio_video_thread() {
-    rtpServer as("127.0.0.1", 30502, false);
-    as.start();
+//void asio_video_thread() {
+//    rtpServer as("127.0.0.1", 30502, false);
+//    as.start();
+//}
+
+void manager_thread() {
+    Manager* m = new Manager();
+    m->init();
 }
 
 
@@ -24,7 +30,7 @@ int main(int argc, char* argv[]) {
     //ffmpeg -re -i C:/Users/97017/Desktop/3.h264 -vcodec copy -f rtp rtp://127.0.0.1:30502
 
 
-    std::thread t2(asio_video_thread);
+    std::thread t2(manager_thread);
     t2.join();
 
     

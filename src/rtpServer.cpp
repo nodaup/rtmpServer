@@ -2,7 +2,6 @@
 #include "rtpParse.h"
 #include <thread>
 #include <seeker/loggerApi.h>
-#include "manager.h"
 using namespace std;
 using std::mutex;
 
@@ -11,8 +10,6 @@ rtpServer::rtpServer(const std::string& ip, int port, bool is_audio)
     : server{ ioContext, udp::endpoint(udp::v4(), port) } {
     I_LOG("asio server inits, ip is {} , udp port is {}", ip, port);
     flag = is_audio;
-    flag = is_audio;
-
 }
 
 void rtpServer::start() {
@@ -27,8 +24,8 @@ void rtpServer::start() {
     int32_t ssrc;
     std::size_t recvLen;
 
-    Manager*m = new Manager();
-    m->init();
+    /*Manager*m = new Manager();
+    m->init();*/
 
     while (loop) {
         udp::endpoint remote_endpoint;
@@ -47,14 +44,30 @@ void rtpServer::start() {
                 continue;
             }
 
-            I_LOG("recv data");   
+            I_LOG("recv data");
+            
             auto temp = new uint8_t[recvLen - payload_offset + 1]();
-            memcpy(temp, &recv_buf[payload_offset], recvLen - payload_offset);  
-            m->saveRtpPkt(temp, recvLen - payload_offset);
-
-
+            memcpy(temp, &recv_buf[payload_offset], recvLen - payload_offset);
+            callBack(temp, recvLen - payload_offset);
         }
     }
 
     
+}
+
+
+void rtpServer::send(uint8_t* packet, int len) {
+
+    if (packet) {
+
+        uint8_t temp[1024] { 0 };
+        memcpy(temp, packet, len);
+        //remote ip port
+        udp::endpoint remote_endpoint(ip::address_v4::from_string("127.0.0.1"), 7000);
+        server.send_to(asio::buffer(temp), remote_endpoint);
+    }
+}
+
+void rtpServer::setCallBack(RecvDataCallback _callBack) {
+    callBack = _callBack;
 }
