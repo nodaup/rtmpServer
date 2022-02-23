@@ -82,17 +82,20 @@ int Manager::decodeTh() {
                 ch->convertFrame(frame);
             }
 
-            //push to encode list
-            uint8_t* dstBuf = (uint8_t*)malloc(frame->width * frame->height * 3);
-            memset(dstBuf, 0, frame->width * frame->height * 3);
-            uint8_t* frameData = frame->data[0];
-            for (int i = 0; i < frame->height; ++i) {
-                memcpy(dstBuf + i * frame->width * 3, frameData, frame->width * 3);
-                frameData += frame->linesize[0];
+            if (rst == 0) {
+                //push to encode list
+                uint8_t* dstBuf = (uint8_t*)malloc(frame->width * frame->height * 3);
+                memset(dstBuf, 0, frame->width * frame->height * 3);
+                uint8_t* frameData = frame->data[0];
+                for (int i = 0; i < frame->height; ++i) {
+                    memcpy(dstBuf + i * frame->width * 3, frameData, frame->width * 3);
+                    frameData += frame->linesize[0];
+                }
+                std::unique_lock<std::mutex> lk1(encodePktMtx);
+                sendList.push(mixFrame{ dstBuf, frame->width, frame->height });
+                sendpktCond.notify_all();
             }
-            std::unique_lock<std::mutex> lk1(encodePktMtx);
-            sendList.push(mixFrame{ dstBuf, frame->width, frame->height });
-            sendpktCond.notify_all();
+            
 
             av_frame_free(&frame);
             free(pkt.first);

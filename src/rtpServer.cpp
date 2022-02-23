@@ -59,8 +59,8 @@ void rtpServer::start() {
 void rtpServer::send(uint8_t* packet, int len) {
 
     if (packet) {
-
-        uint8_t temp[BUFF_SIZE] { 0 };
+        
+        uint8_t temp[BUFF_SIZE]{ 0 };
         memcpy(temp, packet, len);
         //remote ip port rtmp://192.168.31.154:1935
         udp::endpoint remote_endpoint(ip::address_v4::from_string("192.168.31.154"), 1935);
