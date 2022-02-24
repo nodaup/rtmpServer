@@ -28,6 +28,12 @@ set(MODULE_PATH ${PROJECT_SOURCE_DIR}/module)
 set(VIDEO_ENGINE_INCLUDE "${MODULE_PATH}/videoEngineImp7/api" "${MODULE_PATH}/videoEngineImp7/include")
 set(VIDEO_ENGINE_LIB "videoEngineImp7")
 
+# audioEngine
+OPTION(USE_AUDIO_ENGINE_IMPL5 "use the audio engine imp5 module" ON)
+add_subdirectory("module/audioEngineImp5")
+set(AUDIO_ENGINE_INCLUDE "${MODULE_PATH}/audioEngineImp5/api" "${MODULE_PATH}/audioEngineImp5/include")
+set(AUDIO_ENGINE_LIB "audioEngineImp5")
+
 
 #-------------------------------------
 # ffmpeg lib and include
@@ -135,7 +141,7 @@ add_executable (${PROJECT_NAME}
       "src/ConvertH264.hpp" 
       
       "src/manager.cpp"
-      "src/netManager.cpp")
+      "src/netManager.cpp" "include/AudioSender.h" "include/AudioUtil.hpp" "src/AudioSender.cpp" "include/VideoSender.h" "include/VideoUtil.h" "src/VideoSender.cpp")
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"
@@ -171,7 +177,7 @@ if(WIN32)
             ${OpenCV_INCLUDE_DIRS}
 			${ASIO_DIR}
             ${VIDEO_ENGINE_INCLUDE}
-
+            ${AUDIO_ENGINE_INCLUDE}
 	)
 	target_link_libraries( ${PROJECT_NAME}  
 		PRIVATE 
@@ -185,6 +191,7 @@ if(WIN32)
             ${SWSCALE_LIBRARY}
             ${OpenCV_LIBS}
             ${VIDEO_ENGINE_LIB}
+            ${AUDIO_ENGINE_LIB}
 
 	)
    
@@ -202,6 +209,7 @@ elseif(UNIX)
             ${SWSCALE_INCLUDE_DIR}
             ${OpenCV_INCLUDE_DIRS}
             ${VIDEO_ENGINE_INCLUDE}
+            ${AUDIO_ENGINE_INCLUDE}
 
 	)
 	target_link_libraries( ${PROJECT_NAME}  
@@ -217,6 +225,7 @@ elseif(UNIX)
             ${SWSCALE_LIBRARY}
             ${OpenCV_LIBS}
             ${VIDEO_ENGINE_LIB}
+            ${AUDIO_ENGINE_LIB}
 			
 	)
 endif()

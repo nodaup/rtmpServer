@@ -7,16 +7,13 @@
 #include<math.h>
 #include <map>
 #include <list>
-#include "videoEngine/VideoEngine.h"
-#include "videoEngine/VideoEngine_imp_87.h"
 #include <seeker/loggerApi.h>
 #include <queue>
 #include "rtpServer.h"
 #include "netManager.h"
-using theia::VideoEngine::Decoder;
-using theia::VideoEngine::Encoder;
-using theia::VideoEngine::imp_87::Decoder87;
-using theia::VideoEngine::imp_87::Encoder87;
+#include "VideoSender.h"
+#include "AudioSender.h"
+
 
 #define SAVEFILENAME "C:/Users/97017/Desktop/save_parse.h264"
 
@@ -47,21 +44,28 @@ public:
 
     int encodeTh();
 
-    uint8_t* AVFrame2Img(AVFrame* pFrame);
+    uint8_t* getYUVData(AVFrame* frame);
 
+    //video recv
     std::unordered_map<std::string, std::thread> threadMap = {};
     std::list<std::pair<uint8_t*, int>> pktList; //接收队列，待解码
     std::queue<mixFrame> sendList; //处理完成队列，待编码，发送
     std::mutex recvPktMtx;
     std::mutex encodePktMtx;
-
     bool stopFlag = false;
-
-    Decoder* decoder = nullptr;
-    Encoder* encoder = nullptr;
+    theia::VideoEngine::Decoder* decoder = nullptr;
     rtpServer* as = nullptr;
-    std::shared_ptr<NetManager> netManager = nullptr;
-    
     condition_variable pktCond;
     condition_variable sendpktCond;
+
+    //send
+    std::shared_ptr<NetManager> netManager = nullptr;
+    std::unique_ptr<VideoSender> videoSender = nullptr;
+    std::unique_ptr<AudioSender> audioSender = nullptr;
+
+    int audioPacketTime;
+    int videoPacketTime;
+
+    uint8_t* yuvData;
+
 };

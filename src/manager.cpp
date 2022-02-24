@@ -13,35 +13,48 @@
 //}
 
 int Manager::init() {
-    decoder = new Decoder87();
+    decoder = new theia::VideoEngine::imp_87::Decoder87();
     decoder->setPixFmt(AV_PIX_FMT_YUV420P);
     decoder->init();
     ConvertH264Util* ch = nullptr;
 
+
     netManager = std::make_shared<NetManager>();
+    netManager->setRtmpUrl("rtmp://192.168.31.154:1935");
 
     if (netManager->rtmpInit(0) == -1) {
-        I_LOG("net manager error");
+        return 0;
     }
 
-    encoder = new Encoder87();
-    //encoder->setIsCrf(false);
-    encoder->setCodecFmt("h264");
-    encoder->setBitrate(1000000);
-    encoder->setFrameRate(20);
-    encoder->setFrameSize(640, 360);
-    encoder->setIsRTMP(true);
-    encoder->setIsCrf(false);
-    encoder->setProfile("high");
-    encoder->setMaxBFrame(0);
-    encoder->setGopSize(30);
-    encoder->setPixFmt(AV_PIX_FMT_BGRA);
-    encoder->init();
-    encoder->copyParams(netManager->getVideoStream()->codecpar);
+    //videoSender / audioSender init encoder
+    videoSender = std::make_unique<VideoSender>(netManager);
+    VideoDefinition vd = VideoDefinition(640, 360);
+    videoSender->initEncoder(vd, 20);
+    videoPacketTime = 1000 / 20;
+    long long startTime = seeker::Time::currentTime();
+    videoSender->setStartTime(startTime);
+
+    //encoder info
+    CoderInfo encoderinfo;
+    encoderinfo.inChannels = 1;
+    encoderinfo.inSampleRate = 32000;
+    encoderinfo.inFormate = MyAVSampleFormat::AV_SAMPLE_FMT_S16;
+    encoderinfo.outChannels = 1;
+    encoderinfo.outSampleRate = 32000;
+    encoderinfo.outFormate = MyAVSampleFormat::AV_SAMPLE_FMT_FLTP;
+    encoderinfo.cdtype = CodecType::AAC;
+    encoderinfo.muxType = theia::audioEngine::MuxType::ADTS;
+    int buffSize = 1024 * 2;
+
+    audioPacketTime = 1024 * 1000 / encoderinfo.outSampleRate;
+
+    audioSender = std::make_unique<AudioSender>(netManager);
+    audioSender->initAudioEncoder(encoderinfo);
 
     if (netManager->rtmpInit(1) == -1) {
-        I_LOG("net manager error");
+        return 0;
     }
+
 
     std::thread decodeThread{ &Manager::decodeTh, this };
     threadMap["decodeTh"] = std::move(decodeThread);
@@ -61,6 +74,8 @@ int Manager::init() {
     };
     as->setCallBack(recvCallBack);
     as->start();
+
+
 
 }
 
@@ -122,66 +137,56 @@ int Manager::encodeTh() {
         }
         auto dstData = sendList.front();
         sendList.pop();
-        auto input = AVFrame2Img(dstData.data);
-        encoder->pushWatchFmt(input, -1, dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
-        AVPacket* packet = encoder->pollAVPacket();
-        I_LOG("video packet pts {} dura {}", packet->pts, packet->duration);
-        if (packet) {
-            I_LOG("///");
-            packet->duration = ceil(1000 / 30);
-            packet->stream_index = 0;
-            if (netManager) {
-                I_LOG("???");
-                long long now = GetTickCount64();
-                if (packet->pts > now)
-                {
-                    std::this_thread::sleep_for(std::chrono::microseconds((packet->pts - now) * 1000));
-                }
-                int ret = netManager->sendRTMPData(packet);
-                I_LOG("send !!");
-            }
-        }
         lk.unlock();
-        delete input;
+        if (dstData.data != NULL) {
+            videoSender->send(getYUVData(dstData.data), dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
+            free(yuvData);
+        }
     }
 }
 
-uint8_t* Manager::AVFrame2Img(AVFrame* pFrame) {
-    int frameHeight = pFrame->height;
-    int frameWidth = pFrame->width;
-    int channels = 3;
 
-    //反转图像
-  //  pFrame->data[0] += pFrame->linesize[0] * (frameHeight - 1);
-  //  pFrame->linesize[0] *= -1;
-  //  pFrame->data[1] += pFrame->linesize[1] * (frameHeight / 2 - 1);
-  //  pFrame->linesize[1] *= -1;
-  //  pFrame->data[2] += pFrame->linesize[2] * (frameHeight / 2 - 1);
-  //  pFrame->linesize[2] *= -1;
+uint8_t* Manager::getYUVData(AVFrame* frame) {
+    int frame_height = frame->height;
+    int frame_width = frame->width;
+    int i = 0;
+    int j = 0;
+    int k = 0;
+    int size = avpicture_get_size(AV_PIX_FMT_YUV420P, frame_width, frame_height);
+    int video_decode_size = avpicture_get_size(AV_PIX_FMT_YUV420P, frame_width, frame_height);
+    yuvData = (uint8_t*)malloc(size * 3 * sizeof(char));
+    uint8_t* video_decode_buf = (uint8_t*)malloc(video_decode_size * 3 * sizeof(char));
+    if (frame) {
+        for (i = 0; i < frame_height; i++)
+        {
+            memcpy(video_decode_buf + frame_width * i,
+                frame->data[0] + frame->linesize[0] * i,
+                frame_width);
+        }
+        for (j = 0; j < frame_height / 2; j++)
+        {
+            memcpy(video_decode_buf + frame_width * i + frame_width / 2 * j,
+                frame->data[1] + frame->linesize[1] * j,
+                frame_width / 2);
+        }
+        for (k = 0; k < frame_height / 2; k++)
+        {
+            memcpy(video_decode_buf + frame_width * i + frame_width / 2 * j + frame_width / 2 * k,
+                frame->data[2] + frame->linesize[2] * k,
+                frame_width / 2);
+        }
 
-    //创建保存yuv数据的buffer
-    uint8_t* pDecodedBuffer = (uint8_t*)malloc(
-        frameHeight * frameWidth * sizeof(uint8_t) * channels);
+        if (video_decode_buf)
+        {
+            memcpy(yuvData, video_decode_buf, video_decode_size);
+            free(video_decode_buf);
+            video_decode_buf = nullptr;
+        }
+        else {
+            free(yuvData);
+            yuvData = nullptr;
+        }
 
-    //从AVFrame中获取yuv420p数据，并保存到buffer
-    int i, j, k;
-    //拷贝y分量
-    for (i = 0; i < frameHeight; i++) {
-        memcpy(pDecodedBuffer + frameWidth * i,
-            pFrame->data[0] + pFrame->linesize[0] * i,
-            frameWidth);
     }
-    //拷贝u分量
-    for (j = 0; j < frameHeight / 2; j++) {
-        memcpy(pDecodedBuffer + frameWidth * i + frameWidth / 2 * j,
-            pFrame->data[1] + pFrame->linesize[1] * j,
-            frameWidth / 2);
-    }
-    //拷贝v分量
-    for (k = 0; k < frameHeight / 2; k++) {
-        memcpy(pDecodedBuffer + frameWidth * i + frameWidth / 2 * j + frameWidth / 2 * k,
-            pFrame->data[2] + pFrame->linesize[2] * k,
-            frameWidth / 2);
-    }
-    return pDecodedBuffer;
+    return yuvData;
 }
