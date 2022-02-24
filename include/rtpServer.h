@@ -45,7 +45,7 @@ private:
 	udp::socket server;
 	//trueÎªÒôÆµ£¬falseÎªÊÓÆµ
 	bool flag;
-	int frameRate = 30;
+	int frameRate = 20;
 	RecvDataCallback callBack;
 
 public:

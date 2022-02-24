@@ -27,6 +27,12 @@ struct mixFrame
     int height;
 };
 
+struct audioFrame
+{
+    uint8_t* data;
+    int len;
+};
+
 class Manager
 {
 
@@ -44,6 +50,14 @@ public:
 
     int encodeTh();
 
+    int decodeAudioTh();
+
+    int encodeAudioTh();
+
+    void asio_video_thread();
+
+    void asio_audio_thread();
+
     uint8_t* getYUVData(AVFrame* frame);
 
     //video recv
@@ -57,6 +71,21 @@ public:
     rtpServer* as = nullptr;
     condition_variable pktCond;
     condition_variable sendpktCond;
+
+    //audio recv
+    rtpServer* as_audio = nullptr;
+    std::mutex recvPktMtx_a;
+    std::mutex encodePktMtx_a;
+    std::list<std::pair<uint8_t*, int>> pktList_a; //接收队列，待解码
+    std::queue<audioFrame> sendList_a;
+    condition_variable pktCond_a;
+    condition_variable sendpktCond_a;
+    // 音频封装格式
+    AudioInfo info, outInfo;
+    CodecType decoderCodecType;
+    CoderInfo decoderInfo;
+    std::unique_ptr<MixerImpl> mixer = nullptr;
+
 
     //send
     std::shared_ptr<NetManager> netManager = nullptr;
