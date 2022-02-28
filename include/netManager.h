@@ -47,5 +47,5 @@ private:
     AVStream* audio_st = nullptr;
     std::unique_ptr<std::mutex> mutex4Sender = nullptr;
 
-    std::string rtmpUrl = "rtmp://192.168.31.154:1935";
+    std::string rtmpUrl = "rtmp://10.28.197.125:1935";
 };

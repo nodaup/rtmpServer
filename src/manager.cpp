@@ -15,13 +15,22 @@
 void Manager::asio_audio_thread() {
     //audio
     as_audio = new rtpServer("127.0.0.1", 1234, true);
-    auto recvCallBack2 = [&](uint8_t* pkt, int pktsize) {
-        recvPktMtx_a.lock();
+    auto recvCallBack2 = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {  
         auto temp = new uint8_t[pktsize + 1]();
         memcpy(temp, pkt, pktsize);
-        pktList_a.push_back(std::pair<uint8_t*, int>(temp, pktsize));
-        recvPktMtx_a.unlock();
-        pktCond_a.notify_one();
+
+        //decode
+        adecoder.addPacket(pkt, pktsize, ts, seqnum);
+        //save frame
+        auto recvFrame = adecoder.getFrame();
+        I_LOG("111!");
+        if (recvFrame) {
+            I_LOG("recv AUDIO!");
+            std::unique_lock<std::mutex> lk1(encodePktMtx_a);
+            sendList_a.push(audioFrame{ recvFrame, pktsize });
+            sendpktCond_a.notify_one();
+            lk1.unlock();
+        }
     };
     as_audio->setCallBack(recvCallBack2);
     as_audio->start();
@@ -35,6 +44,21 @@ int Manager::init() {
     ConvertH264Util* ch = nullptr;
 
     //init audio decoder
+
+    AudioInfo in;
+    in.sample_rate = decoderInfo.inSampleRate;
+    in.channels = decoderInfo.inChannels;
+    in.sample_fmt = (AVSampleFormat)(decoderInfo.inFormate);
+    in.channel_layout = av_get_default_channel_layout(decoderInfo.inChannels);
+    if (decoderInfo.cdtype == CodecType::PCMA) {
+        in.pcmaTimeSeg = 30;
+    }
+    AudioInfo out;
+    out.sample_rate = decoderInfo.outSampleRate;
+    out.channels = decoderInfo.outChannels;
+    out.sample_fmt = (AVSampleFormat)(decoderInfo.outFormate);
+    out.channel_layout = av_get_default_channel_layout(decoderInfo.outChannels);
+
     CoderInfo decoderinfo;
     decoderinfo.outChannels = 1;
     decoderinfo.outSampleRate = 32000;
@@ -53,13 +77,13 @@ int Manager::init() {
     outInfo.setInfo(decoderinfo.outSampleRate, (AVSampleFormat)decoderinfo.outFormate,
         decoderinfo.outChannels);
 
-    I_LOG("sfu mode: init audio mixer");
-    mixer = std::make_unique<MixerImpl>();
-    mixer->init(outInfo, decoderCodecType);
+    adecoder.init(in, out, decoderCodecType, 0);
+    adecoder.setDemuxType(MuxType::None);
+
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("rtmp://192.168.31.154:1935");
+    netManager->setRtmpUrl("rtmp://10.28.197.125:1935");
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -102,9 +126,6 @@ int Manager::init() {
     std::thread encodeThread{ &Manager::encodeTh, this };
     threadMap["encodeTh"] = std::move(encodeThread);
 
-    std::thread audioDecodeThread{ &Manager::decodeAudioTh, this };
-    threadMap["decodeAudioTh"] = std::move(audioDecodeThread);
-
     std::thread audioEncodeThread{ &Manager::encodeAudioTh, this };
     threadMap["encodeAudioTh"] = std::move(audioEncodeThread);
 
@@ -113,7 +134,7 @@ int Manager::init() {
 
     //video
     as = new rtpServer("127.0.0.1", 30502, false);
-    auto recvCallBack = [&](uint8_t* pkt, int pktsize) {
+    auto recvCallBack = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {
         recvPktMtx.lock();
         auto temp = new uint8_t[pktsize + 1]();
         memcpy(temp, pkt, pktsize);
@@ -187,7 +208,7 @@ int Manager::encodeTh() {
         if (dstData.data != NULL) {
             videoSender->send(getYUVData(dstData.data), dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
             free(yuvData);
-            free(dstData.data);
+            av_free(dstData.data);
         }
     }
 }
@@ -237,37 +258,6 @@ uint8_t* Manager::getYUVData(AVFrame* frame) {
     return yuvData;
 }
 
-int Manager::decodeAudioTh() {
-
-    while (true)
-    {
-        list<std::pair<uint8_t*, int>> tempPktList;
-        unique_lock<mutex> lock{ recvPktMtx_a };
-        pktCond_a.wait(lock, [&]() {return pktList_a.size() > 0; });
-
-        auto pkt = pktList_a.front();
-        pktList_a.pop_front();
-        lock.unlock();
-        //I_LOG("PKT:{}", pkt.second);
-        mixer->pushData(0, pkt.first, pkt.second);
-        AVFrame * mixedFrame = mixer->getFrame();;
-        if (mixedFrame && mixedFrame->data[0]) {
-            int datalen =
-                mixedFrame->nb_samples *
-                av_get_bytes_per_sample(static_cast<AVSampleFormat>(mixedFrame->format));
-            pair<uint8_t*, int> audiopair(mixedFrame->data[0], datalen);
-            av_free(mixedFrame->data[0]);
-            av_frame_free(&mixedFrame);
-            //push send list
-            std::unique_lock<std::mutex> lk1(encodePktMtx_a);
-            sendList_a.push(audioFrame{ audiopair.first, audiopair.second });
-            sendpktCond_a.notify_one();
-            lk1.unlock();
-        }
-        av_frame_free(&mixedFrame);
-        free(pkt.first);
-    }
-}
 
 int Manager::encodeAudioTh() {
     I_LOG("encoder audio thread start");
@@ -286,9 +276,10 @@ int Manager::encodeAudioTh() {
         sendList_a.pop();
         lk.unlock();
         long long now = seeker::Time::currentTime();
-        if (!sendList_a.empty()) {
-            fwrite(dstData.data, 1, dstData.len, pushFile);
-            audioSender->send(dstData.data, dstData.len);
+        if ( dstData.data ) {
+            audioSender->send(dstData.data->data[0], dstData.len);
+            I_LOG("SEND AUDIO!");
+            fwrite(dstData.data->data[0], 1, dstData.len, pushFile);
             free(dstData.data);
             last = now;
         }

@@ -24,8 +24,7 @@ void rtpServer::start() {
     int32_t ssrc;
     std::size_t recvLen;
 
-    /*Manager*m = new Manager();
-    m->init();*/
+    RtpParse* parser = new RtpParse();
 
     while (loop) {
         udp::endpoint remote_endpoint;
@@ -38,9 +37,9 @@ void rtpServer::start() {
             //I_LOG("GET!");
 
             //todo parsing rtp
-            ssrc = RtpParse::parsingRTPPacket(recv_buf, recvLen, &payload_offset, &payload_type);
+            ssrc = parser->parsingRTPPacket(recv_buf, recvLen, &payload_offset, &payload_type);
             if (ssrc < 0) {
-                W_LOG("parsingRTPPacket ssrc wrong...");
+                I_LOG("parsingRTPPacket ssrc wrong...");
                 continue;
             }
 
@@ -48,7 +47,7 @@ void rtpServer::start() {
             
             auto temp = new uint8_t[recvLen - payload_offset + 1]();
             memcpy(temp, &recv_buf[payload_offset], recvLen - payload_offset);
-            callBack(temp, recvLen - payload_offset);
+            callBack(temp, recvLen - payload_offset, ssrc, parser->ts, parser->seqnum, parser->pt);
         
         }
     }
@@ -64,7 +63,7 @@ void rtpServer::send(uint8_t* packet, int len) {
         uint8_t temp[1024]{ 0 };
         memcpy(temp, packet, len);
         //remote ip port rtmp://192.168.31.154:1935
-        udp::endpoint remote_endpoint(ip::address_v4::from_string("192.168.31.154"), 1935);
+        udp::endpoint remote_endpoint(ip::address_v4::from_string("10.28.197.125"), 1935);
         server.send_to(asio::buffer(temp), remote_endpoint);
         free(temp);
     }

@@ -29,8 +29,9 @@ struct mixFrame
 
 struct audioFrame
 {
-    uint8_t* data;
+    AVFrame* data;
     int len;
+    int32_t ssrc;
 };
 
 class Manager
@@ -50,11 +51,7 @@ public:
 
     int encodeTh();
 
-    int decodeAudioTh();
-
     int encodeAudioTh();
-
-    void asio_video_thread();
 
     void asio_audio_thread();
 
@@ -74,18 +71,14 @@ public:
 
     //audio recv
     rtpServer* as_audio = nullptr;
-    std::mutex recvPktMtx_a;
     std::mutex encodePktMtx_a;
-    std::list<std::pair<uint8_t*, int>> pktList_a; //接收队列，待解码
     std::queue<audioFrame> sendList_a;
-    condition_variable pktCond_a;
     condition_variable sendpktCond_a;
     // 音频封装格式
     AudioInfo info, outInfo;
     CodecType decoderCodecType;
     CoderInfo decoderInfo;
-    std::unique_ptr<MixerImpl> mixer = nullptr;
-
+    DecoderImpl adecoder;
 
     //send
     std::shared_ptr<NetManager> netManager = nullptr;

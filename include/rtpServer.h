@@ -34,7 +34,7 @@ using asio::io_context;
 
 #include <functional>
 
-typedef std::function<void(uint8_t*, int)> RecvDataCallback;
+typedef std::function<void(uint8_t*, int, int32_t, int32_t, int32_t, int32_t)> RecvDataCallback;
 
 class rtpServer {
 

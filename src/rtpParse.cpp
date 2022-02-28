@@ -71,6 +71,11 @@ int RtpParse::parsingRTPPacket(uint8_t* data, std::size_t size, int* payload_off
     uint32_t srcId = data[8] << 24 | data[9] << 16 | data[10] << 8 | data[11];
     uint32_t seqNum = data[2] << 8 | data[3];
 
+    ts = rtpTime;
+    ssrc = srcId;
+    seqnum = seqNum;
+    pt = *payloadType;
+
     return srcId;
 }
 
