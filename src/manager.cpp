@@ -12,28 +12,116 @@
 //    return 0;
 //}
 
+void writeAdtsHeaders(uint8_t* header, int dataLength, int channel,
+    int sample_rate) {
+
+    uint8_t profile = 0x02;  // AAC LC
+    uint8_t channelCfg = channel;
+    uint32_t packetLength = dataLength + 7;
+    uint8_t freqIdx;  // 22.05 KHz
+
+    switch (sample_rate) {
+    case 96000:
+        freqIdx = 0x00;
+        break;
+    case 88200:
+        freqIdx = 0x01;
+        break;
+    case 64000:
+        freqIdx = 0x02;
+        break;
+    case 48000:
+        freqIdx = 0x03;
+        break;
+    case 44100:
+        freqIdx = 0x04;
+        break;
+    case 32000:
+        freqIdx = 0x05;
+        break;
+    case 24000:
+        freqIdx = 0x06;
+        break;
+    case 22050:
+        freqIdx = 0x07;
+        break;
+    case 16000:
+        freqIdx = 0x08;
+        break;
+    case 12000:
+        freqIdx = 0x09;
+        break;
+    case 11025:
+        freqIdx = 0x0A;
+        break;
+    case 8000:
+        freqIdx = 0x0B;
+        break;
+    case 7350:
+        freqIdx = 0x0C;
+        break;
+    default:
+        std::cout << "addADTStoPacket: unsupported sampleRate: {}" << std::endl;
+        break;
+    }
+
+    header[0] = (uint8_t)0xFF;
+    header[1] = (uint8_t)0xF1;
+
+    header[2] =
+        (uint8_t)(((profile - 1) << 6) + (freqIdx << 2) + (channelCfg >> 2));
+    header[3] = (uint8_t)(((channelCfg & 3) << 6) + (packetLength >> 11));
+    header[4] = (uint8_t)((packetLength & 0x07FF) >> 3);
+    header[5] = (uint8_t)(((packetLength & 0x0007) << 5) + 0x1F);
+    header[6] = (uint8_t)0xFC;
+}
+
 void Manager::asio_audio_thread() {
     //audio
     as_audio = new rtpServer("127.0.0.1", 1234, true);
+    FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.aac", "wb");
     auto recvCallBack2 = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {  
-        auto temp = new uint8_t[pktsize + 1]();
-        memcpy(temp, pkt, pktsize);
-
         //decode
-        adecoder.addPacket(pkt, pktsize, ts, seqnum);
-        //save frame
-        auto recvFrame = adecoder.getFrame();
-        I_LOG("111!");
-        if (recvFrame) {
-            I_LOG("recv AUDIO!");
-            std::unique_lock<std::mutex> lk1(encodePktMtx_a);
-            sendList_a.push(audioFrame{ recvFrame, pktsize });
-            sendpktCond_a.notify_one();
-            lk1.unlock();
+        uint8_t* adts_hdr = new uint8_t[7];
+        int aac_len = pktsize - 4 + 7;
+        writeAdtsHeaders(adts_hdr, aac_len - 7, 2, 16000);
+        uint8_t* payload = new uint8_t[aac_len];
+        for (int i = 0; i < 7; i++) {
+            payload[i] = adts_hdr[i];
         }
+        for (int i = 0; i < aac_len - 7; i++) {
+            payload[i + 7] = pkt[i+4];
+        }
+        fwrite(payload, 1, aac_len, pushFile);
+
+        int frame_size;
+        uint8_t* adts_buff;
+        frame_size = 0;
+        adts_buff = new uint8_t[4096];
+        std::pair<int&, uint8_t*> demuxAudioFrame(frame_size, adts_buff);
+        adecoder.demux(payload, demuxAudioFrame);
+        I_LOG("111:{}", demuxAudioFrame.first);
+        if (demuxAudioFrame.first > 0) {
+            adecoder.addPacket(demuxAudioFrame.second, demuxAudioFrame.first, ts, seqnum);
+            //save frame
+            auto recvFrame = adecoder.getFrame();
+            I_LOG("222!");
+            if (recvFrame) {
+                I_LOG("recv AUDIO!");
+                std::unique_lock<std::mutex> lk1(encodePktMtx_a);
+                sendList_a.push(audioFrame{ recvFrame, pktsize });
+                sendpktCond_a.notify_one();
+                lk1.unlock();
+            }
+        }
+        if (adts_buff) delete[] adts_buff;
+        free(adts_hdr);
+        free(payload);
+        
     };
     as_audio->setCallBack(recvCallBack2);
     as_audio->start();
+    fclose(pushFile);
 }
 
 int Manager::init() {
@@ -261,7 +349,7 @@ uint8_t* Manager::getYUVData(AVFrame* frame) {
 
 int Manager::encodeAudioTh() {
     I_LOG("encoder audio thread start");
-    FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.pcm", "wb");
+    FILE* pcmFile = fopen("C:/Users/97017/Desktop/out_audio.pcm", "wb+");
     long long last = 0;
     while (true)
     {
@@ -279,10 +367,10 @@ int Manager::encodeAudioTh() {
         if ( dstData.data ) {
             audioSender->send(dstData.data->data[0], dstData.len);
             I_LOG("SEND AUDIO!");
-            fwrite(dstData.data->data[0], 1, dstData.len, pushFile);
+            fwrite(dstData.data->data[0], 1, dstData.len, pcmFile);
             free(dstData.data);
             last = now;
         }
     }
-    fclose(pushFile);
+    fclose(pcmFile);
 }

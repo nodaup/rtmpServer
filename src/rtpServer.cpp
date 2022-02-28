@@ -2,6 +2,7 @@
 #include "rtpParse.h"
 #include <thread>
 #include <seeker/loggerApi.h>
+#include <adts_header_t.h>
 using namespace std;
 using std::mutex;
 
@@ -20,7 +21,7 @@ void rtpServer::start() {
     int count = 0;
     int payload_offset = 0;
     int payload_type = 0;
-
+    adts_header_t* adts;
     int32_t ssrc;
     std::size_t recvLen;
 
@@ -44,11 +45,11 @@ void rtpServer::start() {
             }
 
             //I_LOG("recv data");
-            
+
             auto temp = new uint8_t[recvLen - payload_offset + 1]();
             memcpy(temp, &recv_buf[payload_offset], recvLen - payload_offset);
             callBack(temp, recvLen - payload_offset, ssrc, parser->ts, parser->seqnum, parser->pt);
-        
+
         }
     }
 
