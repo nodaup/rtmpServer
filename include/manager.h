@@ -13,6 +13,7 @@
 #include "netManager.h"
 #include "VideoSender.h"
 #include "AudioSender.h"
+#include <fstream>
 
 
 #define SAVEFILENAME "C:/Users/97017/Desktop/save_parse.h264"
@@ -79,6 +80,7 @@ public:
     CodecType decoderCodecType;
     CoderInfo decoderInfo;
     DecoderImpl adecoder;
+    std::ofstream writeRecv;
 
     //send
     std::shared_ptr<NetManager> netManager = nullptr;

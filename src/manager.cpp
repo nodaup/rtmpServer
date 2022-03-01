@@ -80,6 +80,8 @@ void Manager::asio_audio_thread() {
     //audio
     as_audio = new rtpServer("127.0.0.1", 1234, true);
     FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.aac", "wb");
+    string mixPath = "C:/Users/97017/Desktop/audio_" + std::to_string(seeker::Time::currentTime());
+    writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
     auto recvCallBack2 = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {  
         //decode
         uint8_t* adts_hdr = new uint8_t[7];
@@ -94,27 +96,19 @@ void Manager::asio_audio_thread() {
         }
         fwrite(payload, 1, aac_len, pushFile);
 
-        int frame_size;
-        uint8_t* adts_buff;
-        frame_size = 0;
-        adts_buff = new uint8_t[4096];
-        std::pair<int&, uint8_t*> demuxAudioFrame(frame_size, adts_buff);
-        adecoder.demux(payload, demuxAudioFrame);
-        I_LOG("111:{}", demuxAudioFrame.first);
-        if (demuxAudioFrame.first > 0) {
-            adecoder.addPacket(demuxAudioFrame.second, demuxAudioFrame.first, ts, seqnum);
-            //save frame
-            auto recvFrame = adecoder.getFrame();
-            I_LOG("222!");
-            if (recvFrame) {
-                I_LOG("recv AUDIO!");
-                std::unique_lock<std::mutex> lk1(encodePktMtx_a);
-                sendList_a.push(audioFrame{ recvFrame, pktsize });
-                sendpktCond_a.notify_one();
-                lk1.unlock();
-            }
+        adecoder.addPacket(payload, aac_len, ts, seqnum);
+        //save frame
+        auto recvFrame = adecoder.getFrame();
+        I_LOG("222!");
+        if (recvFrame && recvFrame->data[0]) {
+            std::unique_lock<std::mutex> lk1(encodePktMtx_a);
+            int l = recvFrame->nb_samples * av_get_bytes_per_sample(static_cast<AVSampleFormat>(recvFrame->format)) * recvFrame->channels;
+            I_LOG("recvFrame->channels:{}, recvFrame->format:{}", recvFrame->channels, recvFrame->format);
+            writeRecv.write(reinterpret_cast<const char*>(recvFrame->data[0]), l);
+            sendList_a.push(audioFrame{ recvFrame, l });
+            sendpktCond_a.notify_one();
+            lk1.unlock();
         }
-        if (adts_buff) delete[] adts_buff;
         free(adts_hdr);
         free(payload);
         
@@ -122,6 +116,7 @@ void Manager::asio_audio_thread() {
     as_audio->setCallBack(recvCallBack2);
     as_audio->start();
     fclose(pushFile);
+    writeRecv.close();
 }
 
 int Manager::init() {
@@ -133,45 +128,31 @@ int Manager::init() {
 
     //init audio decoder
 
-    AudioInfo in;
-    in.sample_rate = decoderInfo.inSampleRate;
-    in.channels = decoderInfo.inChannels;
-    in.sample_fmt = (AVSampleFormat)(decoderInfo.inFormate);
-    in.channel_layout = av_get_default_channel_layout(decoderInfo.inChannels);
-    if (decoderInfo.cdtype == CodecType::PCMA) {
-        in.pcmaTimeSeg = 30;
-    }
-    AudioInfo out;
-    out.sample_rate = decoderInfo.outSampleRate;
-    out.channels = decoderInfo.outChannels;
-    out.sample_fmt = (AVSampleFormat)(decoderInfo.outFormate);
-    out.channel_layout = av_get_default_channel_layout(decoderInfo.outChannels);
-
     CoderInfo decoderinfo;
     decoderinfo.outChannels = 1;
     decoderinfo.outSampleRate = 32000;
     decoderinfo.outFormate = MyAVSampleFormat::AV_SAMPLE_FMT_S16;
 
-    decoderinfo.inChannels = 1;
-    decoderinfo.inSampleRate = 32000;
-    decoderinfo.inFormate = MyAVSampleFormat::AV_SAMPLE_FMT_FLTP;
-    decoderinfo.cdtype = CodecType::AAC;
-    decoderinfo.muxType = theia::audioEngine::MuxType::ADTS;
+    AudioInfo in;
+    in.sample_rate = 16000;
+    in.channels = 2;
+    in.sample_fmt = (AVSampleFormat)(MyAVSampleFormat::AV_SAMPLE_FMT_FLTP);
+    in.channel_layout = av_get_default_channel_layout(2);
 
-    decoderCodecType = decoderinfo.cdtype;
+    AudioInfo out;
+    out.sample_rate = 32000;
+    out.channels = decoderInfo.outChannels;
+    out.sample_fmt = (AVSampleFormat)(decoderInfo.outFormate);
+    out.channel_layout = av_get_default_channel_layout(decoderInfo.outChannels);
 
-    info.setInfo(decoderinfo.inSampleRate, (AVSampleFormat)decoderinfo.inFormate,
-        decoderinfo.inChannels);
-    outInfo.setInfo(decoderinfo.outSampleRate, (AVSampleFormat)decoderinfo.outFormate,
-        decoderinfo.outChannels);
+    decoderCodecType = CodecType::AAC;
 
     adecoder.init(in, out, decoderCodecType, 0);
-    adecoder.setDemuxType(MuxType::None);
 
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("rtmp://10.28.197.125:1935");
+    netManager->setRtmpUrl("rtmp://10.1.120.68:1935");
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -195,9 +176,6 @@ int Manager::init() {
     encoderinfo.outFormate = MyAVSampleFormat::AV_SAMPLE_FMT_FLTP;
     encoderinfo.cdtype = CodecType::AAC;
     encoderinfo.muxType = theia::audioEngine::MuxType::ADTS;
-    int buffSize = 1024 * 2;
-
-    audioPacketTime = 1024 * 1000 / encoderinfo.outSampleRate;
 
     audioSender = std::make_unique<AudioSender>(netManager);
     audioSender->initAudioEncoder(encoderinfo);
@@ -259,14 +237,14 @@ int Manager::decodeTh() {
             av_frame_free(&frame);
             continue;
         }
-         /*if (rst == 0) {
+         if (rst == 0) {
              if (ch == nullptr) {
                  I_LOG("rst :{}", rst);
                  ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
              }
              I_LOG("write frame 1");
              ch->convertFrame(frame);
-         }*/
+         }
 
         if (rst == 0) {
             //push to encode list
@@ -296,7 +274,7 @@ int Manager::encodeTh() {
         if (dstData.data != NULL) {
             videoSender->send(getYUVData(dstData.data), dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
             free(yuvData);
-            av_free(dstData.data);
+            av_frame_free(&dstData.data);
         }
     }
 }
@@ -349,7 +327,6 @@ uint8_t* Manager::getYUVData(AVFrame* frame) {
 
 int Manager::encodeAudioTh() {
     I_LOG("encoder audio thread start");
-    FILE* pcmFile = fopen("C:/Users/97017/Desktop/out_audio.pcm", "wb+");
     long long last = 0;
     while (true)
     {
@@ -365,12 +342,13 @@ int Manager::encodeAudioTh() {
         lk.unlock();
         long long now = seeker::Time::currentTime();
         if ( dstData.data ) {
-            audioSender->send(dstData.data->data[0], dstData.len);
-            I_LOG("SEND AUDIO!");
-            fwrite(dstData.data->data[0], 1, dstData.len, pcmFile);
-            free(dstData.data);
-            last = now;
+            int rst = audioSender->send(dstData.data->data[0], dstData.len);
+            if (rst == 0) {
+                I_LOG("SEND AUDIO!");
+                last = now;
+            }
+            av_frame_free(&dstData.data);
+            
         }
     }
-    fclose(pcmFile);
 }
