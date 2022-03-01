@@ -141,7 +141,16 @@ add_executable (${PROJECT_NAME}
       "src/ConvertH264.hpp" 
       
       "src/manager.cpp"
-      "src/netManager.cpp" "include/AudioSender.h" "include/AudioUtil.hpp" "src/AudioSender.cpp" "include/VideoSender.h" "include/VideoUtil.h" "src/VideoSender.cpp" "include/adts_header_t.h" "include/adts_header.hpp")
+      "src/netManager.cpp" 
+      "include/AudioSender.h" 
+      "include/AudioUtil.hpp" 
+      "src/AudioSender.cpp" 
+      "include/VideoSender.h" 
+      "include/VideoUtil.h" 
+      "src/VideoSender.cpp" 
+      "include/adts_header_t.h" 
+      "include/adts_header.hpp"
+      )
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"

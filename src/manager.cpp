@@ -81,7 +81,7 @@ void Manager::asio_audio_thread() {
     as_audio = new rtpServer("127.0.0.1", 1234, true);
     FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.aac", "wb");
     string mixPath = "C:/Users/97017/Desktop/audio_" + std::to_string(seeker::Time::currentTime());
-    writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
+    //writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
     auto recvCallBack2 = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {  
         //decode
         uint8_t* adts_hdr = new uint8_t[7];
@@ -104,7 +104,7 @@ void Manager::asio_audio_thread() {
             std::unique_lock<std::mutex> lk1(encodePktMtx_a);
             int l = recvFrame->nb_samples * av_get_bytes_per_sample(static_cast<AVSampleFormat>(recvFrame->format)) * recvFrame->channels;
             I_LOG("recvFrame->channels:{}, recvFrame->format:{}", recvFrame->channels, recvFrame->format);
-            writeRecv.write(reinterpret_cast<const char*>(recvFrame->data[0]), l);
+            //writeRecv.write(reinterpret_cast<const char*>(recvFrame->data[0]), l);
             sendList_a.push(audioFrame{ recvFrame, l });
             sendpktCond_a.notify_one();
             lk1.unlock();
@@ -116,7 +116,7 @@ void Manager::asio_audio_thread() {
     as_audio->setCallBack(recvCallBack2);
     as_audio->start();
     fclose(pushFile);
-    writeRecv.close();
+    //writeRecv.close();
 }
 
 int Manager::init() {
@@ -227,24 +227,22 @@ int Manager::decodeTh() {
         auto pkt = pktList.front();
         pktList.pop_front();
         lock.unlock();
-        //I_LOG("PKT:{}", pkt.second);
         decoder->push(pkt.first, pkt.second, 0);
         AVFrame* frame = av_frame_alloc();
         int rst = decoder->poll(frame);
-        //I_LOG("decoder poll");
         if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
             //I_LOG("no :{}, width:{}", rst, frame->width);
             av_frame_free(&frame);
             continue;
         }
-         if (rst == 0) {
-             if (ch == nullptr) {
-                 I_LOG("rst :{}", rst);
-                 ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
-             }
-             I_LOG("write frame 1");
-             ch->convertFrame(frame);
-         }
+         //if (rst == 0) {
+         //    if (ch == nullptr) {
+         //        I_LOG("rst :{}", rst);
+         //        ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
+         //    }
+         //    I_LOG("write frame 1");
+         //    ch->convertFrame(frame);
+         //}
 
         if (rst == 0) {
             //push to encode list

@@ -29,10 +29,10 @@ static double r2d(AVRational r)
 int main(int argc, char* argv[])
 {
 
-    char* inUrl = "C:/Users/97017/Desktop/10018985-1-208.mp4";
+    char* inUrl = "C:/Users/97017/Desktop/44.mp4";
     //char *inUrl = "D:/ghb/video_audio_dev/ffmpeg-udemy/FFMpeg实时美颜直播推流实战 ffmpeg，qt5，opencv/03 FFMpegSDK3529923553216442551227969/3.1第一个ffmpegVs2015项目代码包含库文件/src/3.6file_to_rtmp_控制推流速度/test.flv";
 
-    char* outUrl = "rtmp://192.168.31.154:1935";
+    char* outUrl = "rtmp://10.1.120.68:1935";
 
     //初始化所有封装和解封装 flv mp4 mov mp3
     av_register_all();
