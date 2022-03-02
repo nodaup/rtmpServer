@@ -95,7 +95,7 @@ void Manager::asio_audio_thread() {
             payload[i + 7] = pkt[i+4];
         }
         fwrite(payload, 1, aac_len, pushFile);
-
+        
         adecoder.addPacket(payload, aac_len, ts, seqnum);
         //save frame
         auto recvFrame = adecoder.getFrame();
@@ -109,8 +109,8 @@ void Manager::asio_audio_thread() {
             sendpktCond_a.notify_one();
             lk1.unlock();
         }
-        free(adts_hdr);
-        free(payload);
+        delete[] adts_hdr;
+        delete[] payload;
         
     };
     as_audio->setCallBack(recvCallBack2);
@@ -140,19 +140,18 @@ int Manager::init() {
     in.channel_layout = av_get_default_channel_layout(2);
 
     AudioInfo out;
-    out.sample_rate = 32000;
-    out.channels = decoderInfo.outChannels;
-    out.sample_fmt = (AVSampleFormat)(decoderInfo.outFormate);
-    out.channel_layout = av_get_default_channel_layout(decoderInfo.outChannels);
+    out.sample_rate = 22050;
+    out.channels = 1;
+    out.sample_fmt = (AVSampleFormat)(MyAVSampleFormat::AV_SAMPLE_FMT_S16);
+    out.channel_layout = av_get_default_channel_layout(1);
 
     decoderCodecType = CodecType::AAC;
-
     adecoder.init(in, out, decoderCodecType, 0);
-
+    adecoder.setDemuxType(MuxType::None);
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("rtmp://10.1.120.68:1935");
+    netManager->setRtmpUrl("rtmp://10.1.120.211:1935");
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -169,14 +168,15 @@ int Manager::init() {
     //encoder info
     CoderInfo encoderinfo;
     encoderinfo.inChannels = 1;
-    encoderinfo.inSampleRate = 32000;
+    encoderinfo.inSampleRate = 22050;
     encoderinfo.inFormate = MyAVSampleFormat::AV_SAMPLE_FMT_S16;
     encoderinfo.outChannels = 1;
-    encoderinfo.outSampleRate = 32000;
+    encoderinfo.outSampleRate = 22050;
     encoderinfo.outFormate = MyAVSampleFormat::AV_SAMPLE_FMT_FLTP;
     encoderinfo.cdtype = CodecType::AAC;
     encoderinfo.muxType = theia::audioEngine::MuxType::ADTS;
-
+    //1024 * 1000 / samplerate (ms
+    //video 1000/ Ö¡Êý
     audioSender = std::make_unique<AudioSender>(netManager);
     audioSender->initAudioEncoder(encoderinfo);
     audioSender->setStartTime(startTime);
