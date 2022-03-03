@@ -150,7 +150,9 @@ add_executable (${PROJECT_NAME}
       "src/VideoSender.cpp" 
       "include/adts_header_t.h" 
       "include/adts_header.hpp"
-      )
+       
+      
+        "include/mixManager.h" "src/mixManager.cpp")
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"

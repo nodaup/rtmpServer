@@ -47,5 +47,5 @@ private:
     AVStream* audio_st = nullptr;
     std::unique_ptr<std::mutex> mutex4Sender = nullptr;
 
-    std::string rtmpUrl = "rtmp://sendtc3.douyu.com/live/10436292rbLqIFuR?wsSecret=a1ecc124d816bdffce16ca15fdb66688&wsTime=621f1e8e&wsSeek=off&wm=0&tw=0&roirecognition=0&record=flv&origin=tct";
+    std::string rtmpUrl = "C:/Users/97017/Desktop/output.flv";
 };

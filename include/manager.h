@@ -10,13 +10,13 @@
 #include <seeker/loggerApi.h>
 #include <queue>
 #include "rtpServer.h"
-#include "netManager.h"
-#include "VideoSender.h"
-#include "AudioSender.h"
 #include <fstream>
+#include <videoEngine/VideoEngine_imp_87.h>
+#include "audioEngine/AudioEngine_imp_85.h"
+#include "VideoUtil.h"
+#include "AudioUtil.hpp"
 
-
-#define SAVEFILENAME "C:/Users/97017/Desktop/save_parse.h264"
+#define SAVEFILENAME "C:/Users/97017/Desktop/save_parse"+std::to_string(seeker::Time::currentTime()) +".h264"
 
 using namespace std;
 using std::mutex;
@@ -40,9 +40,7 @@ class Manager
 
 public:
 
-    Manager() {
-        
-    }
+    Manager(std::string videoIP, std::string audioIP, int videoPort, int audioPort);
 
     //int saveRtpPkt(uint8_t* pkt, int pktsize);
 
@@ -50,13 +48,13 @@ public:
 
     int decodeTh();
 
-    int encodeTh();
+    //int encodeTh();
 
-    int encodeAudioTh();
+    //int encodeAudioTh();
 
     void asio_audio_thread();
 
-    uint8_t* getYUVData(AVFrame* frame);
+    //uint8_t* getYUVData(AVFrame* frame);
 
     //video recv
     std::unordered_map<std::string, std::thread> threadMap = {};
@@ -68,28 +66,32 @@ public:
     theia::VideoEngine::Decoder* decoder = nullptr;
     rtpServer* as = nullptr;
     condition_variable pktCond;
-    condition_variable sendpktCond;
+    //condition_variable sendpktCond;
 
     //audio recv
     rtpServer* as_audio = nullptr;
     std::mutex encodePktMtx_a;
     std::queue<audioFrame> sendList_a;
-    condition_variable sendpktCond_a;
+    //condition_variable sendpktCond_a;
     // “Ù∆µ∑‚◊∞∏Ò Ω
-    AudioInfo info, outInfo;
     CodecType decoderCodecType;
     CoderInfo decoderInfo;
     DecoderImpl adecoder;
     std::ofstream writeRecv;
 
     //send
-    std::shared_ptr<NetManager> netManager = nullptr;
-    std::unique_ptr<VideoSender> videoSender = nullptr;
-    std::unique_ptr<AudioSender> audioSender = nullptr;
+    //std::shared_ptr<NetManager> netManager = nullptr;
+    //std::unique_ptr<VideoSender> videoSender = nullptr;
+   // std::unique_ptr<AudioSender> audioSender = nullptr;
 
     int audioPacketTime;
     int videoPacketTime;
 
-    uint8_t* yuvData;
+    //uint8_t* yuvData;
+
+    std::string audioIP;
+    std::string videoIP;
+    int audioPort;
+    int videoPort;
 
 };

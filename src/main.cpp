@@ -2,7 +2,7 @@
 #include "INIReader.h"
 #include "rtpServer.h"
 #include "manager.h"
-
+#include "mixManager.h"
 INIReader reader("application.ini");
 
 
@@ -10,10 +10,16 @@ INIReader reader("application.ini");
 //    rtpServer as("127.0.0.1", 30502, false);
 //    as.start();
 //}
+MixManager* mix = new MixManager();
 
 void manager_thread() {
-    Manager* m = new Manager();
-    m->init();
+    Manager* m1 = new Manager("127.0.0.1", "127.0.0.1", 30502, 1234);
+    mix->addManager(m1);
+}
+
+void manager_thread2() {
+    Manager* m2 = new Manager("127.0.0.1", "127.0.0.1", 30504, 1236);
+    mix->addManager(m2);
 }
 
 
@@ -30,8 +36,11 @@ int main(int argc, char* argv[]) {
     //ffmpeg -re -i C:/Users/97017/Desktop/3.h264 -vcodec copy -f rtp rtp://127.0.0.1:30502
 
 
-    std::thread t2(manager_thread);
+    std::thread t1(manager_thread);
+    t1.detach();
+    std::thread t2(manager_thread2);
     t2.join();
 
-    
+    mix->init();
+    mix->mixVideo();
 }
