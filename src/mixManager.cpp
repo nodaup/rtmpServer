@@ -159,7 +159,7 @@ int MixManager::init() {
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("rtmp://10.1.120.211:1935");
+    netManager->setRtmpUrl("C:/Users/97017/Desktop/output.flv");
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -167,7 +167,7 @@ int MixManager::init() {
 
     //videoSender / audioSender init encoder
     videoSender = std::make_unique<VideoSender>(netManager);
-    VideoDefinition vd = VideoDefinition(640, 360);
+    VideoDefinition vd = VideoDefinition(1280, 760);
     videoSender->initEncoder(vd, 20);
     videoPacketTime = 1000 / 20;
     long long startTime = seeker::Time::currentTime();

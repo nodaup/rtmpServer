@@ -39,7 +39,7 @@ int main(int argc, char* argv[]) {
     std::thread t1(manager_thread);
     t1.detach();
     std::thread t2(manager_thread2);
-    t2.join();
+    t2.detach();
 
     mix->init();
     mix->mixVideo();
