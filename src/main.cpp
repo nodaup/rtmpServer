@@ -22,6 +22,10 @@ void manager_thread2() {
     mix->addManager(m2);
 }
 
+void mix_thread() {
+    mix->init();
+}
+
 
 int main(int argc, char* argv[]) {
 
@@ -35,12 +39,11 @@ int main(int argc, char* argv[]) {
    
     //ffmpeg -re -i C:/Users/97017/Desktop/3.h264 -vcodec copy -f rtp rtp://127.0.0.1:30502
 
-
     std::thread t1(manager_thread);
     t1.detach();
     std::thread t2(manager_thread2);
     t2.detach();
 
-    mix->init();
-    mix->mixVideo();
+    std::thread t3(mix_thread);
+    t3.join();
 }

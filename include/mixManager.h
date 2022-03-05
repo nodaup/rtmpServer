@@ -4,6 +4,8 @@
 #include "AudioSender.h"
 #include "manager.h"
 #include <chrono>
+#include "videoEngine/VideoEngine_imp_87.h"
+using PictureMixer = theia::VideoEngine::imp_87::PictureMixer7;
 
 #pragma once
 extern "C" {
@@ -11,6 +13,7 @@ extern "C" {
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libavutil/imgutils.h>
+
 }
 
 class MixManager {
@@ -21,7 +24,7 @@ public:
 	//init netManager videoSender audiosender
 	int init();
 
-	int mixVideo();
+	void mixVideo();
 
 	int mixAudio();
 
@@ -37,8 +40,8 @@ public:
 	int videoPacketTime;
 
 	//Æ´½Ó
-	theia::VideoEngine::PictureMixer* mixer_file;
+	PictureMixer mixer_file;
 
 	vector<Manager*> managerList;
-
+	std::unordered_map<std::string, std::thread> map = {};
 };

@@ -60,7 +60,7 @@ uint8_t* MixManager::getYUVData(AVFrame* frame) {
     return yuvData;
 }
 
-int MixManager::mixVideo() {
+void MixManager::mixVideo() {
     //todo 将list中的sendlist放进mix里
     int video_num = 0;
     while (true) {
@@ -82,6 +82,7 @@ int MixManager::mixVideo() {
         }
         else if (video_num == 2) {
             //left right
+            I_LOG("2 video");
             auto leftM = managerList[0];
             auto rightM = managerList[1];
             std::unique_lock<std::mutex> lk(leftM->encodePktMtx);
@@ -96,15 +97,15 @@ int MixManager::mixVideo() {
 
             auto yuvData1 = getYUVData(frame_left.data);
             auto yuvData2 = getYUVData(frame_right.data);
-            mixer_file->setPicture(1, 0, 180, 640, 360);
-            mixer_file->push(1, yuvData1, frame_left.width, frame_left.height, AV_PIX_FMT_YUV420P);
-            mixer_file->setPicture(2, 640, 180, 640, 360);
-            mixer_file->push(1, yuvData2, frame_right.width, frame_right.height, AV_PIX_FMT_YUV420P);
+            mixer_file.setPicture(1, 0, 180, 640, 360);
+            mixer_file.push(1, yuvData1, frame_left.width, frame_left.height, AV_PIX_FMT_YUV420P);
+            mixer_file.setPicture(2, 640, 180, 640, 360);
+            mixer_file.push(1, yuvData2, frame_right.width, frame_right.height, AV_PIX_FMT_YUV420P);
             auto dstFrame = av_frame_alloc();
             dstFrame->format = AV_PIX_FMT_RGB24;
-            dstFrame->width = mixer_file->getCanvasWidth();
-            dstFrame->height = mixer_file->getCanvasHeight();
-            uint8_t* frameData = mixer_file->getCanvas();
+            dstFrame->width = mixer_file.getCanvasWidth();
+            dstFrame->height = mixer_file.getCanvasHeight();
+            uint8_t* frameData = mixer_file.getCanvas();
             av_image_fill_arrays(dstFrame->data, dstFrame->linesize, frameData, AV_PIX_FMT_RGB24, dstFrame->width,
                 dstFrame->height, 1);
             //放入编码器编码 发送
@@ -123,28 +124,28 @@ int MixManager::mixVideo() {
                 lk.unlock();
                 yuvData = getYUVData(frame.data);
                 if (mix_index == 1) {
-                    mixer_file->setPicture(mix_index, 0, 0, 640, 360);
-                    mixer_file->push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
+                    mixer_file.setPicture(mix_index, 0, 0, 320, 180);
+                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
                 }
                 else if (mix_index == 2) {
-                    mixer_file->setPicture(mix_index, 640, 0, 640, 360);
-                    mixer_file->push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
+                    mixer_file.setPicture(mix_index, 320, 0, 320, 180);
+                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
                 }
                 else if (mix_index == 3) {
-                    mixer_file->setPicture(mix_index, 0, 360, 640, 360);
-                    mixer_file->push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
+                    mixer_file.setPicture(mix_index, 0, 180, 320, 180);
+                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
                 }
                 else if (mix_index == 4) {
-                    mixer_file->setPicture(mix_index, 360, 640, 640, 360);
-                    mixer_file->push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
+                    mixer_file.setPicture(mix_index, 180, 320, 320, 180);
+                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
                 }
                 mix_index++;
             }
             auto dstFrame = av_frame_alloc();
             dstFrame->format = AV_PIX_FMT_RGB24;
-            dstFrame->width = mixer_file->getCanvasWidth();
-            dstFrame->height = mixer_file->getCanvasHeight();
-            uint8_t* frameData = mixer_file->getCanvas();
+            dstFrame->width = mixer_file.getCanvasWidth();
+            dstFrame->height = mixer_file.getCanvasHeight();
+            uint8_t* frameData = mixer_file.getCanvas();
             av_image_fill_arrays(dstFrame->data, dstFrame->linesize, frameData, AV_PIX_FMT_RGB24, dstFrame->width,
                 dstFrame->height, 1);
             //放入编码器编码 发送
@@ -167,7 +168,7 @@ int MixManager::init() {
 
     //videoSender / audioSender init encoder
     videoSender = std::make_unique<VideoSender>(netManager);
-    VideoDefinition vd = VideoDefinition(1280, 760);
+    VideoDefinition vd = VideoDefinition(640, 360);
     videoSender->initEncoder(vd, 20);
     videoPacketTime = 1000 / 20;
     long long startTime = seeker::Time::currentTime();
@@ -193,8 +194,11 @@ int MixManager::init() {
         return 0;
     }
 
-    //init 
-    mixer_file->setCanvasSize(1280, 720);
-    mixer_file->setCanvasColor(0, 0, 0, 1);
-    mixer_file->init();
+    //init
+    mixer_file.setCanvasSize(640, 360);
+    mixer_file.setCanvasColor(0, 0, 0, 1);
+    mixer_file.init();
+
+    std::thread mixVideoThread{ &MixManager::mixVideo, this };
+    map["mixVideo"] = std::move(mixVideoThread);
 }
