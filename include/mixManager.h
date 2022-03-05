@@ -26,10 +26,6 @@ public:
 
 	void mixVideo();
 
-	int mixAudio();
-
-	int addManager(Manager* m);
-
 	uint8_t* getYUVData(AVFrame* frame);
 
 	std::shared_ptr<NetManager> netManager = nullptr;
@@ -41,7 +37,8 @@ public:
 
 	//Æ´½Ó
 	PictureMixer mixer_file;
-
-	vector<Manager*> managerList;
 	std::unordered_map<std::string, std::thread> map = {};
+	std::map<int32_t, mixFrame> mixList;
+	std::mutex mixPktMtx;
+	condition_variable mixCond;
 };

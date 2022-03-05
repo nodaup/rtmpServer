@@ -1,16 +1,6 @@
 #include "manager.h"
 #include "ConvertH264.hpp"
 
-//int Manager::saveRtpPkt(uint8_t* pkt, int pktsize) {
-//
-//    as->recvPktMtx.lock();
-//    auto temp = new uint8_t[pktsize + 1]();
-//    memcpy(temp, pkt, pktsize);
-//    as->pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
-//    as->recvPktMtx.unlock();
-//    pktCond.notify_one();
-//    return 0;
-//}
 
 Manager::Manager(std::string vIP, std::string aIP, int vPort, int aPort) {
     videoIP = vIP;
@@ -169,7 +159,15 @@ int Manager::init() {
         recvPktMtx.lock();
         auto temp = new uint8_t[pktsize + 1]();
         memcpy(temp, pkt, pktsize);
-        pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
+        auto it = pktList.find(ssrc);
+        if (it != pktList.end()) {
+            it->second.data = temp;
+            it->second.len = pktsize;
+        }
+        else {
+            pktList.insert(std::pair<int32_t, recvFrame>(ssrc, recvFrame{ temp, pktsize }));
+        }
+        flag = true;
         recvPktMtx.unlock();
         pktCond.notify_one();
     };
@@ -181,137 +179,40 @@ int Manager::init() {
 int Manager::decodeTh() {
 
     ConvertH264Util* ch = nullptr;
-
     while (true)
     {
-        list<std::pair<uint8_t*, int>> tempPktList;
 
         unique_lock<mutex> lock{ recvPktMtx };
-        pktCond.wait(lock, [&]() {return pktList.size() > 0; });
-
-        auto pkt = pktList.front();
-        pktList.pop_front();
+        pktCond.wait(lock, [&]() {return pktList.size() > 0 && flag == true; });
+        for (auto iter = pktList.begin(); iter != pktList.end(); iter++) {
+            if (iter->second.len > 0 && iter->second.data != nullptr) {
+                I_LOG("decoder");
+                auto temp = new uint8_t[iter->second.len + 1]();
+                memcpy(temp, iter->second.data, iter->second.len);
+                decoder->push(temp, iter->second.len, 0);
+                AVFrame* frame = av_frame_alloc();
+                int rst = decoder->poll(frame);
+                if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
+                    av_frame_free(&frame);
+                    continue;
+                }
+                if (rst == 0) {
+                    I_LOG("SUCC");
+                    if (ch == nullptr) {
+                        ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
+                    }
+                    ch->convertFrame(frame);
+                }
+                if (rst == 0) {
+                    cb(iter->first, frame, frame->width, frame->height);
+                }
+            }         
+        }
         lock.unlock();
-        decoder->push(pkt.first, pkt.second, 0);
-        AVFrame* frame = av_frame_alloc();
-        int rst = decoder->poll(frame);
-        if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
-            //I_LOG("no :{}, width:{}", rst, frame->width);
-            av_frame_free(&frame);
-            continue;
-        }
-        if (rst == 0) {
-            if (ch == nullptr) {
-                I_LOG("rst :{}", rst);
-                ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
-            }
-            I_LOG("write frame 1");
-            ch->convertFrame(frame);
-        }
-
-        if (rst == 0) {
-            //push to encode list
-            std::unique_lock<std::mutex> lk1(encodePktMtx);
-            sendList.push(mixFrame{ frame, frame->width, frame->height });
-            //sendpktCond.notify_one();
-            lk1.unlock();
-        }
-        free(pkt.first);
+        flag = false;
     }
 }
 
-//int Manager::encodeTh() {
-//    I_LOG("encoder thread start");
-//    while (true)
-//    {
-//        std::unique_lock<std::mutex> lk(encodePktMtx);
-//        sendpktCond.wait(lk, [this]() {return sendList.size() > 0; });
-//        if (stopFlag)
-//        {
-//            lk.unlock();
-//            break;
-//        }
-//        auto dstData = sendList.front();
-//        sendList.pop();
-//        lk.unlock();
-//        if (dstData.data != NULL) {
-//            videoSender->send(getYUVData(dstData.data), dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
-//            free(yuvData);
-//            av_frame_free(&dstData.data);
-//        }
-//    }
-//}
-
-//uint8_t* Manager::getYUVData(AVFrame* frame) {
-//    int frame_height = frame->height;
-//    int frame_width = frame->width;
-//    int i = 0;
-//    int j = 0;
-//    int k = 0;
-//    int size = avpicture_get_size(AV_PIX_FMT_YUV420P, frame_width, frame_height);
-//    int video_decode_size = avpicture_get_size(AV_PIX_FMT_YUV420P, frame_width, frame_height);
-//    yuvData = (uint8_t*)malloc(size * 3 * sizeof(char));
-//    uint8_t* video_decode_buf = (uint8_t*)malloc(video_decode_size * 3 * sizeof(char));
-//    if (frame) {
-//        for (i = 0; i < frame_height; i++)
-//        {
-//            memcpy(video_decode_buf + frame_width * i,
-//                frame->data[0] + frame->linesize[0] * i,
-//                frame_width);
-//        }
-//        for (j = 0; j < frame_height / 2; j++)
-//        {
-//            memcpy(video_decode_buf + frame_width * i + frame_width / 2 * j,
-//                frame->data[1] + frame->linesize[1] * j,
-//                frame_width / 2);
-//        }
-//        for (k = 0; k < frame_height / 2; k++)
-//        {
-//            memcpy(video_decode_buf + frame_width * i + frame_width / 2 * j + frame_width / 2 * k,
-//                frame->data[2] + frame->linesize[2] * k,
-//                frame_width / 2);
-//        }
-//
-//        if (video_decode_buf)
-//        {
-//            memcpy(yuvData, video_decode_buf, video_decode_size);
-//            free(video_decode_buf);
-//            video_decode_buf = nullptr;
-//        }
-//        else {
-//            free(yuvData);
-//            yuvData = nullptr;
-//        }
-//
-//    }
-//    return yuvData;
-//}
-
-
-//int Manager::encodeAudioTh() {
-//    I_LOG("encoder audio thread start");
-//    long long last = 0;
-//    while (true)
-//    {
-//        std::unique_lock<std::mutex> lk(encodePktMtx_a);
-//        sendpktCond_a.wait(lk, [this]() {return sendList_a.size() > 0; });
-//        if (stopFlag)
-//        {
-//            lk.unlock();
-//            break;
-//        }
-//        auto dstData = sendList_a.front();
-//        sendList_a.pop();
-//        lk.unlock();
-//        long long now = seeker::Time::currentTime();
-//        if ( dstData.data ) {
-//            int rst = audioSender->send(dstData.data->data[0], dstData.len);
-//            if (rst == 0) {
-//                I_LOG("SEND AUDIO!");
-//                last = now;
-//            }
-//            av_frame_free(&dstData.data);
-//
-//        }
-//    }
-//}
+void Manager::setDecodeCB(decodeCB _callBack) {
+    cb = _callBack;
+}

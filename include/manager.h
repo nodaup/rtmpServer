@@ -28,12 +28,20 @@ struct mixFrame
     int height;
 };
 
+struct recvFrame
+{
+    uint8_t* data;
+    int len;
+};
+
 struct audioFrame
 {
     AVFrame* data;
     int len;
     int32_t ssrc;
 };
+
+typedef std::function<void(int32_t, AVFrame* data, int width, int height)> decodeCB;
 
 class Manager
 {
@@ -48,50 +56,38 @@ public:
 
     int decodeTh();
 
-    //int encodeTh();
-
-    //int encodeAudioTh();
 
     void asio_audio_thread();
 
-    //uint8_t* getYUVData(AVFrame* frame);
+    void setDecodeCB(decodeCB _callBack);
 
     //video recv
     std::unordered_map<std::string, std::thread> threadMap = {};
-    std::list<std::pair<uint8_t*, int>> pktList; //接收队列，待解码
-    std::queue<mixFrame> sendList; //处理完成队列，待编码，发送
+    std::map<int32_t, recvFrame> pktList = {}; //接收队列，待解码
     std::mutex recvPktMtx;
-    std::mutex encodePktMtx;
     bool stopFlag = false;
     theia::VideoEngine::Decoder* decoder = nullptr;
     rtpServer* as = nullptr;
     condition_variable pktCond;
-    //condition_variable sendpktCond;
 
     //audio recv
     rtpServer* as_audio = nullptr;
     std::mutex encodePktMtx_a;
     std::queue<audioFrame> sendList_a;
-    //condition_variable sendpktCond_a;
     // 音频封装格式
     CodecType decoderCodecType;
     CoderInfo decoderInfo;
     DecoderImpl adecoder;
     std::ofstream writeRecv;
 
-    //send
-    //std::shared_ptr<NetManager> netManager = nullptr;
-    //std::unique_ptr<VideoSender> videoSender = nullptr;
-   // std::unique_ptr<AudioSender> audioSender = nullptr;
-
     int audioPacketTime;
-    int videoPacketTime;
-
-    //uint8_t* yuvData;
 
     std::string audioIP;
     std::string videoIP;
     int audioPort;
     int videoPort;
 
+    decodeCB cb;
+
+    bool flag = false;
 };

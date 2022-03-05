@@ -9,10 +9,6 @@ MixManager::~MixManager()
 {
 }
 
-int MixManager::addManager(Manager* m) {
-    managerList.push_back(m);
-    return 0;
-}
 
 uint8_t* MixManager::getYUVData(AVFrame* frame) {
     int frame_height = frame->height;
@@ -61,85 +57,41 @@ uint8_t* MixManager::getYUVData(AVFrame* frame) {
 }
 
 void MixManager::mixVideo() {
-    //todo 将list中的sendlist放进mix里
     int video_num = 0;
+    
     while (true) {
+        unique_lock<mutex> lock{ mixPktMtx };
+        mixCond.wait(lock, [&]() {return mixList.size() > 0; });
         int mix_index = 1;
-        video_num = managerList.size();
+        video_num = mixList.size();
         if (video_num == 1) {
             //不混流，直接编码，发送
-            auto m = managerList[0];
-            std::unique_lock<std::mutex> lk(m->encodePktMtx);
-            auto dstData = m->sendList.front();
-            m->sendList.pop();
-            lk.unlock();
-            if (dstData.data != NULL) {
-                auto yuvData = getYUVData(dstData.data);
-                videoSender->send(getYUVData(dstData.data), dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
-                free(yuvData);
-                av_frame_free(&dstData.data);
+            for (auto iter = mixList.begin(); iter != mixList.end(); iter++) {
+                if (iter->second.data) {
+                    auto yuvData = getYUVData(iter->second.data);
+                    videoSender->send(yuvData, iter->second.width, iter->second.height, AV_PIX_FMT_YUV420P);
+                    free(yuvData);
+                    av_frame_free(&iter->second.data);
+                }
             }
+            I_LOG("1111");
         }
         else if (video_num == 2) {
-            //left right
-            I_LOG("2 video");
-            auto leftM = managerList[0];
-            auto rightM = managerList[1];
-            std::unique_lock<std::mutex> lk(leftM->encodePktMtx);
-            auto frame_left = leftM->sendList.front();
-            leftM->sendList.pop();
-            lk.unlock();
-
-            std::unique_lock<std::mutex> lk2(rightM->encodePktMtx);
-            auto frame_right = rightM->sendList.front();
-            rightM->sendList.pop();
-            lk2.unlock();
-
-            auto yuvData1 = getYUVData(frame_left.data);
-            auto yuvData2 = getYUVData(frame_right.data);
-            mixer_file.setPicture(1, 0, 180, 640, 360);
-            mixer_file.push(1, yuvData1, frame_left.width, frame_left.height, AV_PIX_FMT_YUV420P);
-            mixer_file.setPicture(2, 640, 180, 640, 360);
-            mixer_file.push(1, yuvData2, frame_right.width, frame_right.height, AV_PIX_FMT_YUV420P);
-            auto dstFrame = av_frame_alloc();
-            dstFrame->format = AV_PIX_FMT_RGB24;
-            dstFrame->width = mixer_file.getCanvasWidth();
-            dstFrame->height = mixer_file.getCanvasHeight();
-            uint8_t* frameData = mixer_file.getCanvas();
-            av_image_fill_arrays(dstFrame->data, dstFrame->linesize, frameData, AV_PIX_FMT_RGB24, dstFrame->width,
-                dstFrame->height, 1);
-            //放入编码器编码 发送
-            videoSender->send(getYUVData(dstFrame), dstFrame->width, dstFrame->height, AV_PIX_FMT_YUV420P);
-            free(yuvData1);
-            free(yuvData2);
-            av_frame_free(&dstFrame);
-        }
-        else if (video_num > 2) {
-            //混多路流
-            uint8_t* yuvData;
-            for (auto iter : managerList) {
-                std::unique_lock<std::mutex> lk(iter->encodePktMtx);
-                auto frame = iter->sendList.front();
-                iter->sendList.pop();
-                lk.unlock();
-                yuvData = getYUVData(frame.data);
-                if (mix_index == 1) {
-                    mixer_file.setPicture(mix_index, 0, 0, 320, 180);
-                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
+            int id = 1;
+            for (auto iter = mixList.begin(); iter != mixList.end(); iter++) {
+                if (iter->second.data) {
+                    auto yuvData = getYUVData(iter->second.data);
+                    if (id%2 == 1) {
+                        mixer_file.setPicture(id, 0, 0, 320, 180);
+                        mixer_file.push(mix_index, yuvData, iter->second.width, iter->second.height, AV_PIX_FMT_YUV420P);
+                    }
+                    else if(id%2 == 0) {
+                        mixer_file.setPicture(id, 320, 0, 320, 180);
+                        mixer_file.push(mix_index, yuvData, iter->second.width, iter->second.height, AV_PIX_FMT_YUV420P);
+                    }      
+                    av_frame_free(&iter->second.data);
+                    id++;
                 }
-                else if (mix_index == 2) {
-                    mixer_file.setPicture(mix_index, 320, 0, 320, 180);
-                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
-                }
-                else if (mix_index == 3) {
-                    mixer_file.setPicture(mix_index, 0, 180, 320, 180);
-                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
-                }
-                else if (mix_index == 4) {
-                    mixer_file.setPicture(mix_index, 180, 320, 320, 180);
-                    mixer_file.push(mix_index, yuvData, frame.width, frame.height, AV_PIX_FMT_YUV420P);
-                }
-                mix_index++;
             }
             auto dstFrame = av_frame_alloc();
             dstFrame->format = AV_PIX_FMT_RGB24;
@@ -150,8 +102,8 @@ void MixManager::mixVideo() {
                 dstFrame->height, 1);
             //放入编码器编码 发送
             videoSender->send(getYUVData(dstFrame), dstFrame->width, dstFrame->height, AV_PIX_FMT_YUV420P);
-            free(yuvData);
             av_frame_free(&dstFrame);
+            I_LOG("2222");
         }
     }
 }
@@ -193,6 +145,23 @@ int MixManager::init() {
     if (netManager->rtmpInit(1) == -1) {
         return 0;
     }
+
+
+    Manager* m1 = new Manager("127.0.0.1", "127.0.0.1", 30502, 1234);
+    auto mixcallBack = [&](int32_t ssrc, AVFrame* data, int width, int height) {
+        I_LOG("mix recv");
+        mixPktMtx.lock();
+        auto it = mixList.find(ssrc);
+        if (it != mixList.end()) {
+            it->second = mixFrame{ data, width, height };
+        }
+        else {
+            mixList.insert(std::pair<int32_t, mixFrame>(ssrc, mixFrame{ data, width, height }));
+        }
+        mixPktMtx.unlock();
+        mixCond.notify_one();
+    };
+    m1->setDecodeCB(mixcallBack);
 
     //init
     mixer_file.setCanvasSize(640, 360);
