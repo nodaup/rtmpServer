@@ -65,6 +65,7 @@ public:
     std::unordered_map<std::string, std::thread> threadMap = {};
     std::map<int32_t, recvFrame> pktList = {}; //接收队列，待解码
     std::mutex recvPktMtx;
+    std::mutex insertPktMtx;
     bool stopFlag = false;
     theia::VideoEngine::Decoder* decoder = nullptr;
     rtpServer* as = nullptr;

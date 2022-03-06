@@ -160,6 +160,7 @@ int Manager::init() {
         auto temp = new uint8_t[pktsize + 1]();
         memcpy(temp, pkt, pktsize);
         auto it = pktList.find(ssrc);
+        insertPktMtx.lock();
         if (it != pktList.end()) {
             it->second.data = temp;
             it->second.len = pktsize;
@@ -170,7 +171,8 @@ int Manager::init() {
             f.len = pktsize;
             pktList.insert(std::pair<int32_t, recvFrame>(ssrc, f));
         }
-        I_LOG("len:{}", pktsize);
+        insertPktMtx.unlock();
+        //I_LOG("len:{}", pktsize);
         flag = true;
         recvPktMtx.unlock();
         pktCond.notify_one();
@@ -189,9 +191,13 @@ int Manager::decodeTh() {
         unique_lock<mutex> lock{ recvPktMtx };
         pktCond.wait(lock, [&]() {return pktList.size() > 0 && flag == true; });
         for (auto iter = pktList.begin(); iter != pktList.end(); iter++) {
-            if (iter->second.len > 0 && iter->second.data != nullptr) {
+            if (iter->second.len > 0 && iter->second.len < 1460) {
+                
+                unique_lock<mutex> lk{ insertPktMtx };
                 auto temp = new uint8_t[iter->second.len + 1]();
                 memcpy(temp, iter->second.data, iter->second.len);
+                lk.unlock();
+
                 decoder->push(temp, iter->second.len, 0);
                 AVFrame* frame = av_frame_alloc();
                 int rst = decoder->poll(frame);
@@ -206,8 +212,7 @@ int Manager::decodeTh() {
                         ch = new ConvertH264Util(frame->width, frame->height, SAVEFILENAME);
                     }
                     ch->convertFrame(frame);
-                }
-                if (rst == 0) {
+                    
                     cb(iter->first, frame, frame->width, frame->height);
                 }
             }         
