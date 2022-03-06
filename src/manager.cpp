@@ -151,7 +151,7 @@ int Manager::init() {
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("rtmp://10.1.120.211:1935");
+    netManager->setRtmpUrl("C:/Users/97017/Desktop/output.flv");
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -247,6 +247,7 @@ int Manager::decodeTh() {
         if (rst == 0) {
             //push to encode list
             std::unique_lock<std::mutex> lk1(encodePktMtx);
+            I_LOG("len:{}", pkt.second);
             sendList.push(mixFrame{ frame, frame->width, frame->height });
             sendpktCond.notify_one();
             lk1.unlock();
