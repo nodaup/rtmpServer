@@ -231,7 +231,7 @@ int Manager::decodeTh() {
         AVFrame* frame = av_frame_alloc();
         int rst = decoder->poll(frame);
         if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
-            //I_LOG("no :{}, width:{}", rst, frame->width);
+            I_LOG("fail len:{}", pkt.second);
             av_frame_free(&frame);
             continue;
         }
@@ -247,7 +247,7 @@ int Manager::decodeTh() {
         if (rst == 0) {
             //push to encode list
             std::unique_lock<std::mutex> lk1(encodePktMtx);
-            I_LOG("len:{}", pkt.second);
+            I_LOG("succ len:{}", pkt.second);
             sendList.push(mixFrame{ frame, frame->width, frame->height });
             sendpktCond.notify_one();
             lk1.unlock();
