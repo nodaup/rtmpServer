@@ -134,25 +134,17 @@ add_executable (${PROJECT_NAME}
       ${CPPLIST}
 
       "src/rtpServer.cpp"
-      
       "src/main.cpp"
       #"test/mp42rtmp.cpp"
       "src/rtpParse.cpp"
       "src/ConvertH264.hpp" 
-      
       "src/manager.cpp"
-      "src/netManager.cpp" 
-      "include/AudioSender.h" 
-      "include/AudioUtil.hpp" 
+      "src/netManager.cpp"  
       "src/AudioSender.cpp" 
-      "include/VideoSender.h" 
-      "include/VideoUtil.h" 
       "src/VideoSender.cpp" 
-      "include/adts_header_t.h" 
-      "include/adts_header.hpp"
-       
-      
-        "include/mixManager.h" "src/mixManager.cpp")
+      "src/mixManager.cpp" 
+      #"test/test.cpp"
+      )
 elseif(UNIX)
 add_executable (${PROJECT_NAME} 
       "src/Boot.cpp"

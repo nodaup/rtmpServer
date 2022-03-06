@@ -165,8 +165,12 @@ int Manager::init() {
             it->second.len = pktsize;
         }
         else {
-            pktList.insert(std::pair<int32_t, recvFrame>(ssrc, recvFrame{ temp, pktsize }));
+            recvFrame f;
+            f.data = temp;
+            f.len = pktsize;
+            pktList.insert(std::pair<int32_t, recvFrame>(ssrc, f));
         }
+        I_LOG("len:{}", pktsize);
         flag = true;
         recvPktMtx.unlock();
         pktCond.notify_one();
@@ -186,13 +190,13 @@ int Manager::decodeTh() {
         pktCond.wait(lock, [&]() {return pktList.size() > 0 && flag == true; });
         for (auto iter = pktList.begin(); iter != pktList.end(); iter++) {
             if (iter->second.len > 0 && iter->second.data != nullptr) {
-                I_LOG("decoder");
                 auto temp = new uint8_t[iter->second.len + 1]();
                 memcpy(temp, iter->second.data, iter->second.len);
                 decoder->push(temp, iter->second.len, 0);
                 AVFrame* frame = av_frame_alloc();
                 int rst = decoder->poll(frame);
                 if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
+                    I_LOG("fail");
                     av_frame_free(&frame);
                     continue;
                 }
