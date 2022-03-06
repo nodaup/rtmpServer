@@ -191,7 +191,7 @@ int Manager::decodeTh() {
         unique_lock<mutex> lock{ recvPktMtx };
         pktCond.wait(lock, [&]() {return pktList.size() > 0 && flag == true; });
         for (auto iter = pktList.begin(); iter != pktList.end(); iter++) {
-            if (iter->second.len > 0 && iter->second.len < 1460) {
+            if (iter->second.len > 0) {
                 
                 unique_lock<mutex> lk{ insertPktMtx };
                 auto temp = new uint8_t[iter->second.len + 1]();
