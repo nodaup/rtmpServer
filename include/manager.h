@@ -14,6 +14,8 @@
 #include "VideoSender.h"
 #include "AudioSender.h"
 #include <fstream>
+#include "videoEngine/VideoEngine_imp_87.h"
+using PictureMixer = theia::VideoEngine::imp_87::PictureMixer7;
 
 
 #define SAVEFILENAME "C:/Users/97017/Desktop/save_parse.h264"
@@ -56,6 +58,10 @@ public:
 
     void asio_audio_thread();
 
+    void video_recv_2();
+
+    int decodeTh2();
+
     uint8_t* getYUVData(AVFrame* frame);
 
     //video recv
@@ -69,6 +75,15 @@ public:
     rtpServer* as = nullptr;
     condition_variable pktCond;
     condition_variable sendpktCond;
+
+    //video recv2
+    rtpServer* as2 = nullptr;
+    condition_variable pktCond2;
+    std::mutex recvPktMtx2;
+    std::list<std::pair<uint8_t*, int>> pktList2;
+    theia::VideoEngine::Decoder* decoder2 = nullptr;
+    std::queue<mixFrame> sendList2; //处理完成队列，待编码，发送
+    PictureMixer mixer_file;
 
     //audio recv
     rtpServer* as_audio = nullptr;

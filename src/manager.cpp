@@ -1,16 +1,6 @@
 #include "manager.h"
 #include "ConvertH264.hpp"
 
-//int Manager::saveRtpPkt(uint8_t* pkt, int pktsize) {
-//
-//    as->recvPktMtx.lock();
-//    auto temp = new uint8_t[pktsize + 1]();
-//    memcpy(temp, pkt, pktsize);
-//    as->pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
-//    as->recvPktMtx.unlock();
-//    pktCond.notify_one();
-//    return 0;
-//}
 
 void writeAdtsHeaders(uint8_t* header, int dataLength, int channel,
     int sample_rate) {
@@ -119,11 +109,30 @@ void Manager::asio_audio_thread() {
     //writeRecv.close();
 }
 
+void Manager::video_recv_2() {
+    //video
+    as2 = new rtpServer("127.0.0.1", 30504, false);
+    auto recvCallBack = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {
+        recvPktMtx2.lock();
+        auto temp = new uint8_t[pktsize + 1]();
+        memcpy(temp, pkt, pktsize);
+        pktList2.push_back(std::pair<uint8_t*, int>(temp, pktsize));
+        recvPktMtx2.unlock();
+        pktCond2.notify_one();
+    };
+    as2->setCallBack(recvCallBack);
+    as2->start();
+}
+
 int Manager::init() {
     //init video decoder
     decoder = new theia::VideoEngine::imp_87::Decoder87();
     decoder->setPixFmt(AV_PIX_FMT_YUV420P);
     decoder->init();
+
+    decoder2 = new theia::VideoEngine::imp_87::Decoder87();
+    decoder2->setPixFmt(AV_PIX_FMT_YUV420P);
+    decoder2->init();
     ConvertH264Util* ch = nullptr;
 
     //init audio decoder
@@ -185,6 +194,12 @@ int Manager::init() {
         return 0;
     }
 
+    // init
+    mixer_file.setCanvasSize(640, 360);
+    mixer_file.setCanvasColor(0, 0, 0, 1);
+    mixer_file.init();
+
+
 
     std::thread decodeThread{ &Manager::decodeTh, this };
     threadMap["decodeTh"] = std::move(decodeThread);
@@ -197,6 +212,12 @@ int Manager::init() {
 
     std::thread audioRecv{ &Manager::asio_audio_thread, this };
     threadMap["audioRecvTh"] = std::move(audioRecv);
+
+    std::thread videoRecv2{ &Manager::video_recv_2, this };
+    threadMap["video_recv_2"] = std::move(videoRecv2);
+
+    std::thread decodeThread2{ &Manager::decodeTh2, this };
+    threadMap["decodeTh2"] = std::move(decodeThread2);
 
     //video
     as = new rtpServer("127.0.0.1", 30502, false);
@@ -256,12 +277,44 @@ int Manager::decodeTh() {
     }
 }
 
+int Manager::decodeTh2() {
+    while (true)
+    {
+        list<std::pair<uint8_t*, int>> tempPktList;
+
+        unique_lock<mutex> lock{ recvPktMtx2 };
+        pktCond2.wait(lock, [&]() {return pktList2.size() > 0; });
+
+        auto pkt = pktList2.front();
+        pktList2.pop_front();
+        lock.unlock();
+        decoder2->push(pkt.first, pkt.second, 0);
+        AVFrame* frame = av_frame_alloc();
+        int rst = decoder2->poll(frame);
+        if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
+            I_LOG("fail len:{}", pkt.second);
+            av_frame_free(&frame);
+            continue;
+        }
+
+        if (rst == 0) {
+            //push to encode list
+            std::unique_lock<std::mutex> lk1(encodePktMtx);
+            I_LOG("succ len:{}", pkt.second);
+            sendList2.push(mixFrame{ frame, frame->width, frame->height });
+            sendpktCond.notify_one();
+            lk1.unlock();
+        }
+        free(pkt.first);
+    }
+}
+
 int Manager::encodeTh() {
     I_LOG("encoder thread start");
     while (true)
     {
         std::unique_lock<std::mutex> lk(encodePktMtx);
-        sendpktCond.wait(lk, [this]() {return sendList.size() > 0; });
+        sendpktCond.wait(lk, [this]() {return sendList.size() > 0 && sendList2.size() > 0; });
         if (stopFlag)
         {
             lk.unlock();
@@ -269,9 +322,19 @@ int Manager::encodeTh() {
         }
         auto dstData = sendList.front();
         sendList.pop();
+        auto dstData2 = sendList2.front();
+        sendList2.pop();
         lk.unlock();
-        if (dstData.data != NULL) {
-            videoSender->send(getYUVData(dstData.data), dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
+        if (dstData.data != NULL && dstData2.data != NULL) {
+            //to do mix
+            auto yuvData1 = getYUVData(dstData.data);
+            auto yuvData2 = getYUVData(dstData2.data);
+            mixer_file.setPicture(0, 0, 0, 320, 180);
+            mixer_file.setPicture(1, 320, 0, 320, 180);
+            mixer_file.push(0, yuvData1, dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
+            mixer_file.push(1, yuvData2, dstData2.width, dstData2.height, AV_PIX_FMT_YUV420P);
+            uint8_t* frameData = mixer_file.getCanvas();
+            videoSender->send(frameData, 640, 360, AV_PIX_FMT_RGB24);
             free(yuvData);
             av_frame_free(&dstData.data);
         }
