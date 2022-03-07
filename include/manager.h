@@ -66,8 +66,9 @@ public:
 
     //video recv
     std::unordered_map<std::string, std::thread> threadMap = {};
-    std::list<std::pair<uint8_t*, int>> pktList; //接收队列，待解码
+    std::list<std::pair<int32_t, std::pair<uint8_t*, int>>> pktList; //接收队列，待解码
     std::queue<mixFrame> sendList; //处理完成队列，待编码，发送
+    std::queue<mixFrame> sendList_;
     std::mutex recvPktMtx;
     std::mutex encodePktMtx;
     bool stopFlag = false;
@@ -80,9 +81,10 @@ public:
     rtpServer* as2 = nullptr;
     condition_variable pktCond2;
     std::mutex recvPktMtx2;
-    std::list<std::pair<uint8_t*, int>> pktList2;
+    std::list<std::pair< int32_t, std::pair<uint8_t*, int>>> pktList2;
     theia::VideoEngine::Decoder* decoder2 = nullptr;
     std::queue<mixFrame> sendList2; //处理完成队列，待编码，发送
+    std::queue<mixFrame> sendList2_;
     PictureMixer mixer_file;
 
     //audio recv

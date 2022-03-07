@@ -116,7 +116,9 @@ void Manager::video_recv_2() {
         recvPktMtx2.lock();
         auto temp = new uint8_t[pktsize + 1]();
         memcpy(temp, pkt, pktsize);
-        pktList2.push_back(std::pair<uint8_t*, int>(temp, pktsize));
+        std::pair<uint8_t*, int>second (temp, pktsize);
+        std::pair< int32_t, std::pair<uint8_t*, int>> insert (ssrc, second);
+        pktList2.push_back(insert);
         recvPktMtx2.unlock();
         pktCond2.notify_one();
     };
@@ -225,7 +227,9 @@ int Manager::init() {
         recvPktMtx.lock();
         auto temp = new uint8_t[pktsize + 1]();
         memcpy(temp, pkt, pktsize);
-        pktList.push_back(std::pair<uint8_t*, int>(temp, pktsize));
+        std::pair<uint8_t*, int>second(temp, pktsize);
+        std::pair< int32_t, std::pair<uint8_t*, int>> insert(ssrc, second);
+        pktList.push_back(insert);
         recvPktMtx.unlock();
         pktCond.notify_one();
     };
@@ -237,25 +241,43 @@ int Manager::init() {
 int Manager::decodeTh() {
 
     ConvertH264Util* ch = nullptr;
-
+    int32_t ssrc1;
+    bool order = false;
     while (true)
     {
-        list<std::pair<uint8_t*, int>> tempPktList;
 
         unique_lock<mutex> lock{ recvPktMtx };
         pktCond.wait(lock, [&]() {return pktList.size() > 0; });
 
-        auto pkt = pktList.front();
+        std::pair<int32_t, std::pair<uint8_t*, int>> pkt = pktList.front();
         pktList.pop_front();
+        if (order == false) {
+            ssrc1 = pkt.first;
+            order = true;
+        }
         lock.unlock();
-        decoder->push(pkt.first, pkt.second, 0);
+
+        decoder->push(pkt.second.first, pkt.second.second, 0);
         AVFrame* frame = av_frame_alloc();
         int rst = decoder->poll(frame);
         if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
-            I_LOG("fail len:{}", pkt.second);
             av_frame_free(&frame);
             continue;
         }
+
+        if (rst == 0) {
+            //push to encode list
+            std::unique_lock<std::mutex> lk1(encodePktMtx);
+            if (pkt.first == ssrc1) {
+                sendList.push(mixFrame{ frame, frame->width, frame->height });
+            }
+            else {
+                sendList_.push(mixFrame{ frame, frame->width, frame->height });
+            }
+            sendpktCond.notify_one();
+            lk1.unlock();
+        }
+     
          //if (rst == 0) {
          //    if (ch == nullptr) {
          //        I_LOG("rst :{}", rst);
@@ -263,36 +285,32 @@ int Manager::decodeTh() {
          //    }
          //    I_LOG("write frame 1");
          //    ch->convertFrame(frame);
-         //}
-
-        if (rst == 0) {
-            //push to encode list
-            std::unique_lock<std::mutex> lk1(encodePktMtx);
-            I_LOG("succ len:{}", pkt.second);
-            sendList.push(mixFrame{ frame, frame->width, frame->height });
-            sendpktCond.notify_one();
-            lk1.unlock();
-        }
-        free(pkt.first);
+         //} 
+        free(pkt.second.first);
     }
 }
 
 int Manager::decodeTh2() {
+    int32_t ssrc2;
+    bool order = false;
     while (true)
     {
-        list<std::pair<uint8_t*, int>> tempPktList;
 
         unique_lock<mutex> lock{ recvPktMtx2 };
         pktCond2.wait(lock, [&]() {return pktList2.size() > 0; });
 
-        auto pkt = pktList2.front();
+        std::pair<int32_t, std::pair<uint8_t*, int>> pkt = pktList2.front();
         pktList2.pop_front();
+        if (order == false) {
+            ssrc2 = pkt.first;
+            order = true;
+        }
         lock.unlock();
-        decoder2->push(pkt.first, pkt.second, 0);
+
+        decoder2->push(pkt.second.first, pkt.second.second, 0);
         AVFrame* frame = av_frame_alloc();
         int rst = decoder2->poll(frame);
         if (rst != 0 || frame->width <= 0 || frame->height <= 0) {
-            I_LOG("fail len:{}", pkt.second);
             av_frame_free(&frame);
             continue;
         }
@@ -300,12 +318,16 @@ int Manager::decodeTh2() {
         if (rst == 0) {
             //push to encode list
             std::unique_lock<std::mutex> lk1(encodePktMtx);
-            I_LOG("succ len:{}", pkt.second);
-            sendList2.push(mixFrame{ frame, frame->width, frame->height });
+            if (pkt.first == ssrc2) {
+                sendList2.push(mixFrame{ frame, frame->width, frame->height });
+            }
+            else {
+                sendList2_.push(mixFrame{ frame, frame->width, frame->height });
+            }
             sendpktCond.notify_one();
             lk1.unlock();
         }
-        free(pkt.first);
+        free(pkt.second.first);
     }
 }
 
@@ -314,25 +336,35 @@ int Manager::encodeTh() {
     while (true)
     {
         std::unique_lock<std::mutex> lk(encodePktMtx);
-        sendpktCond.wait(lk, [this]() {return sendList.size() > 0 && sendList2.size() > 0; });
+        sendpktCond.wait(lk, [this]() {return sendList.size() > 0 && sendList2.size() > 0 && sendList_.size() > 0 && sendList2_.size() > 0; });
         if (stopFlag)
         {
             lk.unlock();
             break;
         }
-        auto dstData = sendList.front();
+        mixFrame dstData = sendList.front();
         sendList.pop();
-        auto dstData2 = sendList2.front();
+        mixFrame dstData_ = sendList_.front();
+        sendList_.pop();
+        mixFrame dstData2 = sendList2.front();
         sendList2.pop();
+        mixFrame dstData2_ = sendList2_.front();
+        sendList2_.pop();
         lk.unlock();
-        if (dstData.data != NULL && dstData2.data != NULL) {
+        if (dstData.data != NULL && dstData2.data != NULL && dstData_.data != NULL && dstData2_.data != NULL) {
             //to do mix
             auto yuvData1 = getYUVData(dstData.data);
+            auto yuvData_ = getYUVData(dstData_.data);
             auto yuvData2 = getYUVData(dstData2.data);
+            auto yuvData2_ = getYUVData(dstData2_.data);
             mixer_file.setPicture(0, 0, 0, 320, 180);
             mixer_file.setPicture(1, 320, 0, 320, 180);
+            mixer_file.setPicture(2, 0, 180, 320, 180);
+            mixer_file.setPicture(3, 320, 180, 320, 180);
             mixer_file.push(0, yuvData1, dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
             mixer_file.push(1, yuvData2, dstData2.width, dstData2.height, AV_PIX_FMT_YUV420P);
+            mixer_file.push(2, yuvData_, dstData_.width, dstData_.height, AV_PIX_FMT_YUV420P);
+            mixer_file.push(3, yuvData2_, dstData2_.width, dstData2_.height, AV_PIX_FMT_YUV420P);
             uint8_t* frameData = mixer_file.getCanvas();
             videoSender->send(frameData, 640, 360, AV_PIX_FMT_RGB24);
             free(yuvData);
