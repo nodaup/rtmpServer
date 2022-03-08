@@ -162,7 +162,7 @@ int Manager::init() {
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("C:/Users/97017/Desktop/output.flv");
+    netManager->setRtmpUrl("rtmp://10.1.120.211:1935");//"C:/Users/97017/Desktop/output.flv"
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -241,8 +241,7 @@ int Manager::init() {
 int Manager::decodeTh() {
 
     ConvertH264Util* ch = nullptr;
-    int32_t ssrc1;
-    bool order = false;
+    int32_t ssrc1 = 0;
     while (true)
     {
 
@@ -251,9 +250,8 @@ int Manager::decodeTh() {
 
         std::pair<int32_t, std::pair<uint8_t*, int>> pkt = pktList.front();
         pktList.pop_front();
-        if (order == false) {
+        if (ssrc1 == 0) {
             ssrc1 = pkt.first;
-            order = true;
         }
         lock.unlock();
 
@@ -291,8 +289,7 @@ int Manager::decodeTh() {
 }
 
 int Manager::decodeTh2() {
-    int32_t ssrc2;
-    bool order = false;
+    int32_t ssrc2 = 0;
     while (true)
     {
 
@@ -301,9 +298,8 @@ int Manager::decodeTh2() {
 
         std::pair<int32_t, std::pair<uint8_t*, int>> pkt = pktList2.front();
         pktList2.pop_front();
-        if (order == false) {
+        if (ssrc2 == 0) {
             ssrc2 = pkt.first;
-            order = true;
         }
         lock.unlock();
 
