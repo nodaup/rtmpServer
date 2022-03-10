@@ -177,11 +177,6 @@ int Manager::init() {
 
     //init audio decoder
 
-    CoderInfo decoderinfo;
-    decoderinfo.outChannels = 1;
-    decoderinfo.outSampleRate = 32000;
-    decoderinfo.outFormate = MyAVSampleFormat::AV_SAMPLE_FMT_S16;
-
     AudioInfo in;
     in.sample_rate = 16000;
     in.channels = 2;
@@ -190,7 +185,7 @@ int Manager::init() {
 
     AudioInfo in2;
     in2.sample_rate = 16000;
-    in2.channels = 1;
+    in2.channels = 2;
     in2.sample_fmt = (AVSampleFormat)(MyAVSampleFormat::AV_SAMPLE_FMT_FLTP);
     in2.channel_layout = av_get_default_channel_layout(2);
 
@@ -451,8 +446,6 @@ int Manager::encodeAudioTh() {
 
     AudioInfo* in_1 = new AudioInfo();
     in_1->setInfo(22050, AV_SAMPLE_FMT_S16, 1);
-    MixerImpler->updateAudioInfo(ssrc1, *in_1);
-    MixerImpler->updateAudioInfo(ssrc2, *in_1);
 
     while (true)
     {
@@ -472,6 +465,8 @@ int Manager::encodeAudioTh() {
         long long now = seeker::Time::currentTime();
         if (dstData.data && dstData2.data) {
             //todo mix
+            MixerImpler->updateAudioInfo(ssrc1, *in_1);
+            MixerImpler->updateAudioInfo(ssrc2, *in_1);
             MixerImpler->pushData(ssrc1, dstData.data->data[0], dstData.len);
             MixerImpler->pushData(ssrc2, dstData2.data->data[0], dstData2.len);
 
@@ -486,23 +481,17 @@ int Manager::encodeAudioTh() {
                     last = now;
                 }
             }
-            if (mixFrame) {
+            /*if (mixFrame) {
                 if (mixFrame->data[0])
                     delete[] mixFrame->data[0];
                 av_frame_free(&mixFrame);
-            }
+            }*/
         }
 
-        if (dstData.data) {
-            if (dstData.data->data[0])
-                delete[] dstData.data->data[0];
+        if (dstData.data)
             av_frame_free(&dstData.data);
-        }
-        if (dstData2.data) {
-            if (dstData2.data->data[0])
-                delete[] dstData2.data->data[0];
+        if (dstData2.data)
             av_frame_free(&dstData2.data);
-        }
     }
     writeRecv.close();
 }
