@@ -1,6 +1,8 @@
 #include "manager.h"
 #include "ConvertH264.hpp"
 
+int32_t ssrc1;
+int32_t ssrc2;
 
 void writeAdtsHeaders(uint8_t* header, int dataLength, int channel,
     int sample_rate) {
@@ -69,8 +71,8 @@ void writeAdtsHeaders(uint8_t* header, int dataLength, int channel,
 void Manager::asio_audio_thread() {
     //audio
     as_audio = new rtpServer("127.0.0.1", 1234, true);
-    FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.aac", "wb");
-    string mixPath = "C:/Users/97017/Desktop/audio_" + std::to_string(seeker::Time::currentTime());
+    //FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.aac", "wb");
+    //string mixPath = "C:/Users/97017/Desktop/audio_" + std::to_string(seeker::Time::currentTime());
     //writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
     auto recvCallBack2 = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {  
         //decode
@@ -84,18 +86,18 @@ void Manager::asio_audio_thread() {
         for (int i = 0; i < aac_len - 7; i++) {
             payload[i + 7] = pkt[i+4];
         }
-        fwrite(payload, 1, aac_len, pushFile);
+        //fwrite(payload, 1, aac_len, pushFile);
         
         adecoder.addPacket(payload, aac_len, ts, seqnum);
         //save frame
         auto recvFrame = adecoder.getFrame();
-        I_LOG("222!");
         if (recvFrame && recvFrame->data[0]) {
             std::unique_lock<std::mutex> lk1(encodePktMtx_a);
             int l = recvFrame->nb_samples * av_get_bytes_per_sample(static_cast<AVSampleFormat>(recvFrame->format)) * recvFrame->channels;
-            I_LOG("recvFrame->channels:{}, recvFrame->format:{}", recvFrame->channels, recvFrame->format);
+            //I_LOG("recvFrame->channels:{}, recvFrame->format:{}", recvFrame->channels, recvFrame->format);
             //writeRecv.write(reinterpret_cast<const char*>(recvFrame->data[0]), l);
             sendList_a.push(audioFrame{ recvFrame, l });
+            ssrc1 = ssrc;
             sendpktCond_a.notify_one();
             lk1.unlock();
         }
@@ -105,8 +107,44 @@ void Manager::asio_audio_thread() {
     };
     as_audio->setCallBack(recvCallBack2);
     as_audio->start();
-    fclose(pushFile);
+    //fclose(pushFile);
     //writeRecv.close();
+}
+
+void Manager::asio_audio_thread2() {
+    //audio
+    as_audio2 = new rtpServer("127.0.0.1", 1236, true);   
+    FILE* pushFile = fopen("C:/Users/97017/Desktop/out_audio.aac", "wb");
+    auto recvCallBack2 = [&](uint8_t* pkt, int pktsize, int32_t ssrc, int32_t ts, int32_t seqnum, int32_t pt) {
+        //decode
+        uint8_t* adts_hdr = new uint8_t[7];
+        int aac_len = pktsize - 4 + 7;
+        writeAdtsHeaders(adts_hdr, aac_len - 7, 2, 16000);
+        uint8_t* payload = new uint8_t[aac_len];
+        for (int i = 0; i < 7; i++) {
+            payload[i] = adts_hdr[i];
+        }
+        for (int i = 0; i < aac_len - 7; i++) {
+            payload[i + 7] = pkt[i + 4];
+        }
+        fwrite(payload, 1, aac_len, pushFile);
+        adecoder2.addPacket(payload, aac_len, ts, seqnum);
+        //save frame
+        auto recvFrame = adecoder2.getFrame();
+        if (recvFrame && recvFrame->data[0]) {
+            std::unique_lock<std::mutex> lk1(encodePktMtx_a);
+            int l = recvFrame->nb_samples * av_get_bytes_per_sample(static_cast<AVSampleFormat>(recvFrame->format)) * recvFrame->channels;        
+            sendList_a2.push(audioFrame{ recvFrame, l });
+            ssrc2 = ssrc;
+            sendpktCond_a.notify_one();
+            lk1.unlock();
+        }
+        delete[] adts_hdr;
+        delete[] payload;
+    };
+    as_audio2->setCallBack(recvCallBack2);
+    as_audio2->start();
+    fclose(pushFile);
 }
 
 void Manager::video_recv_2() {
@@ -150,6 +188,12 @@ int Manager::init() {
     in.sample_fmt = (AVSampleFormat)(MyAVSampleFormat::AV_SAMPLE_FMT_FLTP);
     in.channel_layout = av_get_default_channel_layout(2);
 
+    AudioInfo in2;
+    in2.sample_rate = 16000;
+    in2.channels = 1;
+    in2.sample_fmt = (AVSampleFormat)(MyAVSampleFormat::AV_SAMPLE_FMT_FLTP);
+    in2.channel_layout = av_get_default_channel_layout(2);
+
     AudioInfo out;
     out.sample_rate = 22050;
     out.channels = 1;
@@ -159,10 +203,12 @@ int Manager::init() {
     decoderCodecType = CodecType::AAC;
     adecoder.init(in, out, decoderCodecType, 0);
     adecoder.setDemuxType(MuxType::None);
+    adecoder2.init(in2, out, decoderCodecType, 0);
+    adecoder2.setDemuxType(MuxType::None);
 
     //init rtmp server
     netManager = std::make_shared<NetManager>();
-    netManager->setRtmpUrl("rtmp://10.1.120.211:1935");//"C:/Users/97017/Desktop/output.flv"
+    netManager->setRtmpUrl("C:/Users/97017/Desktop/output.flv");//"C:/Users/97017/Desktop/output.flv"
 
     if (netManager->rtmpInit(0) == -1) {
         return 0;
@@ -196,12 +242,15 @@ int Manager::init() {
         return 0;
     }
 
-    // init
+    // init video mix
     mixer_file.setCanvasSize(640, 360);
     mixer_file.setCanvasColor(0, 0, 0, 1);
     mixer_file.init();
-
-
+    //init audio mix
+    MixerImpler = std::make_shared<MixerImpl>();
+    AudioInfo out_info;
+    out_info.setInfo(22050, AV_SAMPLE_FMT_S16, 1);
+    MixerImpler->init(out_info, CodecType::AAC);
 
     std::thread decodeThread{ &Manager::decodeTh, this };
     threadMap["decodeTh"] = std::move(decodeThread);
@@ -214,6 +263,9 @@ int Manager::init() {
 
     std::thread audioRecv{ &Manager::asio_audio_thread, this };
     threadMap["audioRecvTh"] = std::move(audioRecv);
+
+    std::thread audioRecv2{ &Manager::asio_audio_thread2, this };
+    threadMap["audio_recv_2"] = std::move(audioRecv2);
 
     std::thread videoRecv2{ &Manager::video_recv_2, this };
     threadMap["video_recv_2"] = std::move(videoRecv2);
@@ -241,7 +293,6 @@ int Manager::init() {
 int Manager::decodeTh() {
 
     ConvertH264Util* ch = nullptr;
-    int32_t ssrc1 = 0;
     while (true)
     {
 
@@ -250,9 +301,6 @@ int Manager::decodeTh() {
 
         std::pair<int32_t, std::pair<uint8_t*, int>> pkt = pktList.front();
         pktList.pop_front();
-        if (ssrc1 == 0) {
-            ssrc1 = pkt.first;
-        }
         lock.unlock();
 
         decoder->push(pkt.second.first, pkt.second.second, 0);
@@ -266,12 +314,7 @@ int Manager::decodeTh() {
         if (rst == 0) {
             //push to encode list
             std::unique_lock<std::mutex> lk1(encodePktMtx);
-            if (pkt.first == ssrc1) {
-                sendList.push(mixFrame{ frame, frame->width, frame->height });
-            }
-            else {
-                sendList_.push(mixFrame{ frame, frame->width, frame->height });
-            }
+            sendList.push(mixFrame{ frame, frame->width, frame->height });
             sendpktCond.notify_one();
             lk1.unlock();
         }
@@ -284,12 +327,11 @@ int Manager::decodeTh() {
          //    I_LOG("write frame 1");
          //    ch->convertFrame(frame);
          //} 
-        free(pkt.second.first);
+        if (pkt.second.first) delete[]pkt.second.first;
     }
 }
 
 int Manager::decodeTh2() {
-    int32_t ssrc2 = 0;
     while (true)
     {
 
@@ -298,9 +340,6 @@ int Manager::decodeTh2() {
 
         std::pair<int32_t, std::pair<uint8_t*, int>> pkt = pktList2.front();
         pktList2.pop_front();
-        if (ssrc2 == 0) {
-            ssrc2 = pkt.first;
-        }
         lock.unlock();
 
         decoder2->push(pkt.second.first, pkt.second.second, 0);
@@ -314,16 +353,11 @@ int Manager::decodeTh2() {
         if (rst == 0) {
             //push to encode list
             std::unique_lock<std::mutex> lk1(encodePktMtx);
-            if (pkt.first == ssrc2) {
-                sendList2.push(mixFrame{ frame, frame->width, frame->height });
-            }
-            else {
-                sendList2_.push(mixFrame{ frame, frame->width, frame->height });
-            }
+            sendList2.push(mixFrame{ frame, frame->width, frame->height });
             sendpktCond.notify_one();
             lk1.unlock();
         }
-        free(pkt.second.first);
+        if (pkt.second.first) delete[]pkt.second.first;
     }
 }
 
@@ -332,7 +366,7 @@ int Manager::encodeTh() {
     while (true)
     {
         std::unique_lock<std::mutex> lk(encodePktMtx);
-        sendpktCond.wait(lk, [this]() {return sendList.size() > 0 && sendList2.size() > 0 && sendList_.size() > 0 && sendList2_.size() > 0; });
+        sendpktCond.wait(lk, [this]() {return sendList.size() > 0 && sendList2.size() > 0; });
         if (stopFlag)
         {
             lk.unlock();
@@ -340,32 +374,26 @@ int Manager::encodeTh() {
         }
         mixFrame dstData = sendList.front();
         sendList.pop();
-        mixFrame dstData_ = sendList_.front();
-        sendList_.pop();
         mixFrame dstData2 = sendList2.front();
         sendList2.pop();
-        mixFrame dstData2_ = sendList2_.front();
-        sendList2_.pop();
         lk.unlock();
-        if (dstData.data != NULL && dstData2.data != NULL && dstData_.data != NULL && dstData2_.data != NULL) {
+        if (dstData.data != NULL && dstData2.data != NULL) {
             //to do mix
-            auto yuvData1 = getYUVData(dstData.data);
-            auto yuvData_ = getYUVData(dstData_.data);
-            auto yuvData2 = getYUVData(dstData2.data);
-            auto yuvData2_ = getYUVData(dstData2_.data);
+            auto yuvData1 = getYUVData(dstData.data);          
+            auto yuvData2 = getYUVData(dstData2.data);  
             mixer_file.setPicture(0, 0, 0, 320, 180);
             mixer_file.setPicture(1, 320, 0, 320, 180);
-            mixer_file.setPicture(2, 0, 180, 320, 180);
-            mixer_file.setPicture(3, 320, 180, 320, 180);
             mixer_file.push(0, yuvData1, dstData.width, dstData.height, AV_PIX_FMT_YUV420P);
             mixer_file.push(1, yuvData2, dstData2.width, dstData2.height, AV_PIX_FMT_YUV420P);
-            mixer_file.push(2, yuvData_, dstData_.width, dstData_.height, AV_PIX_FMT_YUV420P);
-            mixer_file.push(3, yuvData2_, dstData2_.width, dstData2_.height, AV_PIX_FMT_YUV420P);
             uint8_t* frameData = mixer_file.getCanvas();
             videoSender->send(frameData, 640, 360, AV_PIX_FMT_RGB24);
+            
             free(yuvData);
-            av_frame_free(&dstData.data);
         }
+        if (dstData.data)
+            av_frame_free(&dstData.data);
+        if (dstData2.data)
+            av_frame_free(&dstData2.data);
     }
 }
 
@@ -418,10 +446,18 @@ uint8_t* Manager::getYUVData(AVFrame* frame) {
 int Manager::encodeAudioTh() {
     I_LOG("encoder audio thread start");
     long long last = 0;
+    string mixPath = "C:/Users/97017/Desktop/audio_" + std::to_string(seeker::Time::currentTime());
+    writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
+
+    AudioInfo* in_1 = new AudioInfo();
+    in_1->setInfo(22050, AV_SAMPLE_FMT_S16, 1);
+    MixerImpler->updateAudioInfo(ssrc1, *in_1);
+    MixerImpler->updateAudioInfo(ssrc2, *in_1);
+
     while (true)
     {
         std::unique_lock<std::mutex> lk(encodePktMtx_a);
-        sendpktCond_a.wait(lk, [this]() {return sendList_a.size() > 0; });
+        sendpktCond_a.wait(lk, [this]() {return sendList_a.size() > 0 && sendList_a2.size() > 0; });
         if (stopFlag)
         {
             lk.unlock();
@@ -429,16 +465,44 @@ int Manager::encodeAudioTh() {
         }
         auto dstData = sendList_a.front();
         sendList_a.pop();
+        auto dstData2 = sendList_a2.front();
+        sendList_a2.pop();
         lk.unlock();
+
         long long now = seeker::Time::currentTime();
-        if ( dstData.data ) {
-            int rst = audioSender->send(dstData.data->data[0], dstData.len);
-            if (rst == 0) {
-                I_LOG("SEND AUDIO!");
-                last = now;
+        if (dstData.data && dstData2.data) {
+            //todo mix
+            MixerImpler->pushData(ssrc1, dstData.data->data[0], dstData.len);
+            MixerImpler->pushData(ssrc2, dstData2.data->data[0], dstData2.len);
+
+            AVFrame* mixFrame = MixerImpler->getFrame();
+            if (mixFrame != nullptr && mixFrame->data[0] != nullptr) {
+                //            I_LOG("get not null frame ---------------");
+                int datalength = mixFrame->nb_samples *
+                    av_get_bytes_per_sample(static_cast<AVSampleFormat>(mixFrame->format));
+                writeRecv.write(reinterpret_cast<const char*>(mixFrame->data[0]), datalength);
+                int rst = audioSender->send(mixFrame->data[0], datalength);
+                if (rst == 0) {
+                    last = now;
+                }
             }
+            if (mixFrame) {
+                if (mixFrame->data[0])
+                    delete[] mixFrame->data[0];
+                av_frame_free(&mixFrame);
+            }
+        }
+
+        if (dstData.data) {
+            if (dstData.data->data[0])
+                delete[] dstData.data->data[0];
             av_frame_free(&dstData.data);
-            
+        }
+        if (dstData2.data) {
+            if (dstData2.data->data[0])
+                delete[] dstData2.data->data[0];
+            av_frame_free(&dstData2.data);
         }
     }
+    writeRecv.close();
 }

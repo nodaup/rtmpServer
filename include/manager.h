@@ -61,6 +61,8 @@ public:
     void video_recv_2();
 
     int decodeTh2();
+    
+    void asio_audio_thread2();
 
     uint8_t* getYUVData(AVFrame* frame);
 
@@ -68,7 +70,6 @@ public:
     std::unordered_map<std::string, std::thread> threadMap = {};
     std::list<std::pair<int32_t, std::pair<uint8_t*, int>>> pktList; //接收队列，待解码
     std::queue<mixFrame> sendList; //处理完成队列，待编码，发送
-    std::queue<mixFrame> sendList_;
     std::mutex recvPktMtx;
     std::mutex encodePktMtx;
     bool stopFlag = false;
@@ -84,7 +85,6 @@ public:
     std::list<std::pair< int32_t, std::pair<uint8_t*, int>>> pktList2;
     theia::VideoEngine::Decoder* decoder2 = nullptr;
     std::queue<mixFrame> sendList2; //处理完成队列，待编码，发送
-    std::queue<mixFrame> sendList2_;
     PictureMixer mixer_file;
 
     //audio recv
@@ -98,6 +98,12 @@ public:
     CoderInfo decoderInfo;
     DecoderImpl adecoder;
     std::ofstream writeRecv;
+
+    //audio recv2
+    rtpServer* as_audio2 = nullptr;
+    std::queue<audioFrame> sendList_a2;
+    DecoderImpl adecoder2;
+    std::shared_ptr<MixerImpl> MixerImpler;
 
     //send
     std::shared_ptr<NetManager> netManager = nullptr;
