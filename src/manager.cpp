@@ -442,7 +442,7 @@ int Manager::encodeAudioTh() {
     I_LOG("encoder audio thread start");
     long long last = 0;
     string mixPath = "C:/Users/97017/Desktop/audio_" + std::to_string(seeker::Time::currentTime());
-    writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
+    //writeRecv.open(mixPath + ".pcm", std::ofstream::binary);
 
     AudioInfo* in_1 = new AudioInfo();
     in_1->setInfo(22050, AV_SAMPLE_FMT_S16, 1);
@@ -475,7 +475,7 @@ int Manager::encodeAudioTh() {
                 //            I_LOG("get not null frame ---------------");
                 int datalength = mixFrame->nb_samples *
                     av_get_bytes_per_sample(static_cast<AVSampleFormat>(mixFrame->format));
-                writeRecv.write(reinterpret_cast<const char*>(mixFrame->data[0]), datalength);
+                //writeRecv.write(reinterpret_cast<const char*>(mixFrame->data[0]), datalength);
                 int rst = audioSender->send(mixFrame->data[0], datalength);
                 if (rst == 0) {
                     last = now;
@@ -493,5 +493,5 @@ int Manager::encodeAudioTh() {
         if (dstData2.data)
             av_frame_free(&dstData2.data);
     }
-    writeRecv.close();
+    //writeRecv.close();
 }
